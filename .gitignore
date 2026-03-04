@@ -1,0 +1,11 @@
+# Created by https://www.toptal.com/developers/gitignore/api/macos,windows,linux
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.bin
+*.img
+*.ext4
+*.raw
+mem_dump.*
