@@ -2,7 +2,7 @@
 
 **Organization:** FOSSi Foundation  
 **Mentors:** Guillem López Paradís (BSC) & Jonathan Balkind (UCSB)  
-**Contributor:** <!-- TODO: Your Name -->  
+**Contributor:** Radheshyam Modampuri (IIIT Hyderabad)  
 **Duration:** 350 hours (Large)
 
 ---
@@ -244,13 +244,11 @@ Used QEMU Monitor (`info registers`) to extract full CPU state from a running Li
 
 ## 7. About Me
 
-<!-- TODO: Fill in -->
-
-**Name:**  Radheshyam Modampuri
-**University:**  IIIT Hyderabad 
-**Degree/Year:**  Undergraduate 3rd year
-**GitHub:**  https://github.com/radheshyam2006
-**Timezone:**  IST
+**Name:** Radheshyam Modampuri  
+**University:** IIIT Hyderabad  
+**Degree/Year:** Undergraduate, 3rd Year  
+**GitHub:** [radheshyam2006](https://github.com/radheshyam2006)  
+**Timezone:** IST (UTC+5:30)
 
 ### Relevant Skills
 <!-- TODO: List your actual coursework and projects -->

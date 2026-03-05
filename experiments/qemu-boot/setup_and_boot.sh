@@ -52,11 +52,15 @@ echo "[*] Booting RISC-V Linux... (this takes 2-3 minutes)"
 echo ""
 
 # Step 5: Boot!
+# -s  = enable GDB server on port 1234 (for extracting satp CSR)
+# To connect GDB from another terminal:
+#   gdb-multiarch -ex "target remote :1234" -ex "p/x \$satp"
 qemu-system-riscv64 \
     -machine virt \
     -nographic \
     -m 2G \
     -smp 1 \
+    -s \
     -bios /usr/lib/riscv64-linux-gnu/opensbi/generic/fw_jump.bin \
     -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf \
     -device virtio-blk-device,drive=hd0 \

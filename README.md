@@ -1,12 +1,13 @@
 # GSoC 2026 — Generic MinimumLinuxBoot for RTL Simulations
 
+**Contributor:** Radheshyam Modampuri (IIIT Hyderabad)  
 **Organization:** [FOSSi Foundation](https://fossi-foundation.org/)  
 **Mentors:** Guillem López Paradís (BSC) & Jonathan Balkind (UCSB)  
 **Project Page:** [GSoC Ideas](https://fossi-foundation.org/gsoc/gsoc26-ideas#generic-minimumlinuxboot-for-rtl-simulations)
 
 ## Problem
 
-RTL simulation of a full Linux boot on [OpenPiton](https://github.com/PrincetonUniversity/openpiton) takes days/weeks in cycle-accurate simulators like Verilator. This makes iterative hardware verification impractical.
+RTL simulation of a full Linux boot on [OpenPiton](https://github.com/PrincetonUniversity/openpiton) takes **days/weeks** in cycle-accurate simulators like Verilator. This makes iterative hardware verification impractical.
 
 ## Solution
 
@@ -20,22 +21,39 @@ QEMU (fast boot)  ──→  Save State  ──→  Load into Verilator RTL Sim 
 ## Repository Structure
 
 ```
-├── docs/                    # Proposal and research notes
-│   └── proposal_draft.md    # GSoC proposal draft  
+├── docs/
+│   ├── proposal_draft.md    ← GSoC proposal (main document)
+│   └── research_notes.md    ← Research notes & daily log
 ├── experiments/
-│   ├── qemu-boot/           # QEMU RISC-V Linux boot experiments
-│   ├── qemu-state-dump/     # State extraction experiments
-│   └── verilator-test/      # OpenPiton Verilator build experiments
-└── references/              # Key specs and papers
+│   ├── qemu-boot/           ← ✅ RISC-V Linux boot (COMPLETED)
+│   │   ├── register_dump.txt    ← CPU register dump with analysis
+│   │   ├── system_info.txt      ← cpuinfo, meminfo, uname
+│   │   └── setup_and_boot.sh   ← Reproducible boot script
+│   ├── qemu-state-dump/     ← State extraction via GDB (next)
+│   └── verilator-test/      ← OpenPiton Verilator build (planned)
+└── references/
+    └── key_references.md    ← Specs, docs, YouTube resources
 ```
 
 ## Progress
 
-- [ ] Boot RISC-V Linux in QEMU
-- [ ] Extract CPU state (registers, CSRs) via GDB/QEMU Monitor
+- [x] Booted RISC-V Linux in QEMU (Ubuntu 24.04, kernel 6.17, rv64, sv48)
+- [x] Extracted CPU registers & CSRs via QEMU Monitor
+- [x] Documented key findings (sv48 vs Sv39, satp extraction needs GDB)
+- [ ] Extract `satp` CSR via GDB stub
 - [ ] Dump physical memory from QEMU
 - [ ] Build OpenPiton with Verilator
-- [ ] Run bare-metal test on OpenPiton in Verilator
+- [ ] Run bare-metal test on OpenPiton
+
+## Key Findings So Far
+
+| Finding | Implication |
+|---|---|
+| `pc = 0xffffffff80dce26e` | Kernel runs in virtual address space — MMU is active |
+| `medeleg = 0x00f0b559` | Page faults delegated to S-mode — Linux handles VM |
+| QEMU uses sv48, OpenPiton uses Sv39 | Must compile kernel with `CONFIG_RISCV_SV39=y` |
+| `satp` not in QEMU monitor | State extractor must use GDB protocol |
+| Firmware base `0x80000000` | Matches OpenPiton's DRAM base ✅ |
 
 ## Key References
 
