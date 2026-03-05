@@ -275,7 +275,7 @@ Used QEMU Monitor (`info registers`) to extract full CPU state from a running Li
 - Want to solve real infrastructure problems in chip design
 - Interested in open-source silicon movement
 - Excited by the practical impact (saving days of engineer time)
--->
+--> 
 
 ---
 
