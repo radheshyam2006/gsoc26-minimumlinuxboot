@@ -238,6 +238,23 @@ Used QEMU Monitor (`info registers`) to extract full CPU state from a running Li
 
 4. **Firmware base at `0x80000000`** — matches OpenPiton's expected DRAM base, which is encouraging for memory map alignment.
 
+### Experiment 3: `satp` CSR Extraction via GDB ✅
+
+Connected GDB to QEMU's GDB server and extracted the `satp` register:
+
+```
+satp = 0x901b600000081363
+```
+
+| Field | Value | Meaning |
+|---|---|---|
+| MODE (bits 63–60) | `0x9` | Sv48 — 4-level page tables |
+| ASID (bits 59–44) | `0x01b6` (438) | Address Space Identifier |
+| PPN (bits 43–0) | `0x00000081363` | Root page table PPN |
+| **Root PT address** | **`0x81363000`** | `PPN × 4096` — physical address of root page table |
+
+This is the single most important register for the project: it tells the MMU where the page tables live in physical memory. The synthetic init assembly would write this exact value (adjusted for Sv39) into `satp` to restore virtual memory.
+
 > Full results: [experiments/qemu-boot/](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot/tree/main/experiments/qemu-boot)
 
 ---
@@ -260,7 +277,7 @@ Used QEMU Monitor (`info registers`) to extract full CPU state from a running Li
 ### Pre-GSoC Work
 - [x] Booted RISC-V Linux in QEMU (Ubuntu 24.04, rv64, sv48)
 - [x] Extracted CPU state via QEMU Monitor (registers, CSRs)
-- [ ] Extract `satp` CSR via GDB stub
+- [x] Extracted `satp` CSR via GDB — root page table at `0x81363000`
 - [ ] Built OpenPiton in Verilator
 - [ ] Communicated with mentors
 

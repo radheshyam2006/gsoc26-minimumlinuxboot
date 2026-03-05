@@ -52,4 +52,20 @@ ANALYSIS
 
 NOTE: satp CSR is NOT shown by QEMU's "info registers" on RISC-V.
       Must use GDB stub to extract satp (contains page table root address + MMU mode).
-      Command: gdb -ex "target remote :1234" -ex "p/x $satp"
+
+SATP EXTRACTION VIA GDB (March 5, 2026)
+========================================
+Command: gdb-multiarch -ex "target remote :1234" -ex "p/x $satp" -ex "quit"
+Result: satp = 0x901b600000081363
+
+Decoded:
+  MODE  (bits 63-60) = 0x9 = Sv48 (4-level page tables)
+  ASID  (bits 59-44) = 0x01b6 = 438 (Address Space ID)
+  PPN   (bits 43-0)  = 0x00000081363
+  Root page table physical address = PPN * 4096 = 0x81363000
+
+This means:
+  - Linux's root page table is at physical address 0x81363000
+  - This is inside DRAM (base 0x80000000), offset ~19 MB into RAM
+  - The synthetic init assembly would write this value into satp to restore MMU
+  - For OpenPiton (Sv39), MODE=8 instead of 9, and 3-level page tables needed
