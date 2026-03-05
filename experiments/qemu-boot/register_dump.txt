@@ -1,0 +1,55 @@
+QEMU RISC-V Register Dump
+=========================
+Captured from: QEMU 8.2.2 Monitor (info registers)
+Date: March 5, 2026
+System: Ubuntu 24.04 LTS, Linux 6.17.0-14-generic, riscv64
+
+CPU#0
+ V      =   0
+ pc       ffffffff80dce26e
+ mhartid  0000000000000000
+ mstatus  0000000a000000a0
+ hstatus  0000000200000000
+ vsstatus 0000000a00000000
+ mip      0000000000000000
+ mie      000000000000022a
+ mideleg  0000000000001666
+ hideleg  0000000000000000
+ medeleg  0000000000f0b559
+ hedeleg  0000000000000000
+ mtvec    00000000800004f8
+ stvec    ffffffff80ddba94
+ vstvec   0000000000000000
+
+ x0/zero  0000000000000000 x1/ra    ffffffff80dce276 x2/sp    ffffffff82403d70 x3/gp    ffffffff820de3c0
+ x4/tp    ffffffff82404480 x5/t0    ffffffff80dd84a4 x6/t1    000000000000000a x7/t2    0000000000000000
+ x8/s0    ffffffff82403dc0 x9/s1    0000000000000000 x10/a0   0000000000000000 x11/a1   0000000000000000
+ x12/a2   0000000000000000 x13/a3   0000000000000000 x14/a4   0000000000000000 x15/a5   0000000000000000
+ x16/a6   0000000000000000 x17/a7   0000000000000000 x18/s2   0000000000000000 x19/s3   ffffffff828b6938
+ x20/s4   ffffaf807fde71c7 x21/s5   0000000000000000 x22/s6   ffffffff82412e10 x23/s7   ffffffff819d49d0
+ x24/s8   000000000000001f x25/s9   00000000fde364d8 x26/s10  0000000000000001 x27/s11  00000000fd8f3540
+ x28/t3   0000000000000000 x29/t4   0000000000000000 x30/t5   0000000000000000 x31/t6   0000000000000000
+
+ f0/ft0   0000000000000000 f1/ft1   0000000000000000 f2/ft2   0000000000000000 f3/ft3   0000000000000000
+ f4/ft4   0000000000000000 f5/ft5   0000000000000000 f6/ft6   0000000000000000 f7/ft7   0000000000000000
+ f8/fs0   0000000000000000 f9/fs1   0000000000000000 f10/fa0  405843c3c3c3c3c4 f11/fa1  40e1d58800000000
+ f12/fa2  4010000000000000 f13/fa3  4059000000000000 f14/fa4  3ff553f7ced91687 f15/fa5  4044a95810624dd3
+ f16/fa6  0000000000000000 f17/fa7  0000000000000000 f18/fs2  0000000000000000 f19/fs3  0000000000000000
+ f20/fs4  0000000000000000 f21/fs5  0000000000000000 f22/fs6  0000000000000000 f23/fs7  0000000000000000
+ f24/fs8  0000000000000000 f25/fs9  0000000000000000 f26/fs10 0000000000000000 f27/fs11 0000000000000000
+ f28/ft8  0000000000000000 f29/ft9  0000000000000000 f30/ft10 0000000000000000 f31/ft11 0000000000000000
+
+ANALYSIS
+========
+- pc = ffffffff80dce26e  → Kernel virtual address (CPU is executing kernel code in S-mode)
+- sp = ffffffff82403d70  → Kernel stack pointer (also in kernel virtual address space)
+- mstatus = 0x0000000a000000a0 → Machine status (indicates S-mode context, interrupts configured)
+- medeleg = 0x00f0b559 → Exception delegation to S-mode (page faults, ecalls delegated to kernel)
+- mideleg = 0x00001666 → Interrupt delegation to S-mode (timer, external, software interrupts)
+- stvec = ffffffff80ddba94 → Supervisor trap vector (where kernel handles traps)
+- mtvec = 0x800004f8 → Machine trap vector (OpenSBI's trap handler)
+- Floating point regs f10-f15 have values → Some userspace process used floating point
+
+NOTE: satp CSR is NOT shown by QEMU's "info registers" on RISC-V.
+      Must use GDB stub to extract satp (contains page table root address + MMU mode).
+      Command: gdb -ex "target remote :1234" -ex "p/x $satp"

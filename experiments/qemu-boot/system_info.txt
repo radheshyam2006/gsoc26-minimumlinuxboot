@@ -1,0 +1,37 @@
+QEMU RISC-V Linux System Info
+=============================
+Captured from running Ubuntu 24.04 on QEMU RISC-V
+Date: March 5, 2026
+
+=== uname -a ===
+Linux ubuntu 6.17.0-14-generic #14.1~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Jan 29 13:59:41 UTC riscv64 riscv64 riscv64 GNU/Linux
+
+=== cat /proc/cpuinfo ===
+processor       : 0
+hart            : 0
+isa             : rv64imafdch_zicbom_zicboz_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zaamo_zalrsc_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_sstc_svadu
+mmu             : sv48
+mvendorid       : 0x0
+marchid         : 0x0
+mimpid          : 0x0
+
+=== cat /proc/meminfo (first 10 lines) ===
+MemTotal:        2003544 kB
+MemFree:         1407336 kB
+MemAvailable:    1783848 kB
+Buffers:           20592 kB
+Cached:           416772 kB
+SwapCached:            0 kB
+Active:           336716 kB
+Inactive:         134508 kB
+Active(anon):      41632 kB
+Inactive(anon):        0 kB
+
+ANALYSIS
+========
+- ISA: rv64imafdch = 64-bit RISC-V with Integer, Multiply, Atomic, Float, Double, Compressed, Hypervisor
+- MMU: sv48 = 4-level page tables (48-bit virtual address space)
+  - Note: OpenPiton+Ariane typically uses Sv39 (3-level). This difference matters!
+- 1 hart (1 CPU core) — good for initial single-core scope
+- ~2 GB RAM, ~1.4 GB free (Linux using ~600 MB)
+- Kernel: 6.17.0-14-generic (standard Ubuntu kernel for RISC-V)
