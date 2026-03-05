@@ -204,15 +204,53 @@ flowchart LR
 
 ---
 
-## 6. About Me
+## 6. Preliminary Findings (Pre-GSoC Experiments)
+
+I have already begun hands-on experimentation to validate the technical approach:
+
+### Experiment 1: RISC-V Linux Boot in QEMU ✅
+
+Successfully booted **Ubuntu 24.04 LTS** (kernel 6.17.0) on `qemu-system-riscv64 -machine virt` with OpenSBI + U-Boot.
+
+**Boot chain observed:** OpenSBI v1.7 → U-Boot 2025.10 → Linux 6.17 → Ubuntu user-space login
+
+### Experiment 2: CPU State Extraction via QEMU Monitor ✅
+
+Used QEMU Monitor (`info registers`) to extract full CPU state from a running Linux system:
+
+| Register | Extracted Value | Significance |
+|---|---|---|
+| `pc` | `0xffffffff80dce26e` | CPU executing in kernel virtual address space (S-mode) |
+| `sp` (x2) | `0xffffffff82403d70` | Kernel stack pointer |
+| `mstatus` | `0x0a000000a0` | Machine status — S-mode context, interrupts configured |
+| `medeleg` | `0x00f0b559` | Page faults + ecalls delegated to S-mode (Linux handles these) |
+| `mideleg` | `0x00001666` | Timer/external/software interrupts delegated to S-mode |
+| `stvec` | `0xffffffff80ddba94` | Linux kernel's trap handler address |
+| `mtvec` | `0x800004f8` | OpenSBI's M-mode trap handler |
+
+### Key Discoveries
+
+1. **`satp` CSR not available via QEMU Monitor** — requires GDB remote stub (`target remote :1234`) for extraction. This informs the tool design: the state extractor must use GDB protocol, not just the QEMU monitor.
+
+2. **`info tlb` not supported on RISC-V in QEMU** — confirms our approach: TLB state is not extractable and not needed. Hardware page-table walks will refill TLB from the page tables already in memory.
+
+3. **QEMU uses sv48, OpenPiton+Ariane uses Sv39** — the Linux kernel must be compiled with `CONFIG_RISCV_SV39=y` to match OpenPiton's MMU capability. This is a concrete configuration requirement identified through experimentation.
+
+4. **Firmware base at `0x80000000`** — matches OpenPiton's expected DRAM base, which is encouraging for memory map alignment.
+
+> Full results: [experiments/qemu-boot/](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot/tree/main/experiments/qemu-boot)
+
+---
+
+## 7. About Me
 
 <!-- TODO: Fill in -->
 
-**Name:**  
-**University:**  
-**Degree/Year:**  
-**GitHub:**  
-**Timezone:**
+**Name:**  Radheshyam Modampuri
+**University:**  IIIT Hyderabad 
+**Degree/Year:**  Undergraduate 3rd year
+**GitHub:**  https://github.com/radheshyam2006
+**Timezone:**  IST
 
 ### Relevant Skills
 <!-- TODO: List your actual coursework and projects -->
@@ -222,15 +260,15 @@ flowchart LR
 - RISC-V / Verilog experience (if any)
 
 ### Pre-GSoC Work
-<!-- TODO: Check these off as you complete them -->
-- [ ] Booted RISC-V Linux in QEMU
-- [ ] Extracted CPU state via GDB/QEMU Monitor
+- [x] Booted RISC-V Linux in QEMU (Ubuntu 24.04, rv64, sv48)
+- [x] Extracted CPU state via QEMU Monitor (registers, CSRs)
+- [ ] Extract `satp` CSR via GDB stub
 - [ ] Built OpenPiton in Verilator
 - [ ] Communicated with mentors
 
 ---
 
-## 7. Why This Project?
+## 8. Why This Project?
 
 <!-- TODO: Write 2-3 genuine paragraphs. Some angles:
 - Bridge between OS and hardware fascinates you
@@ -248,3 +286,4 @@ flowchart LR
 3. [Verilator User Guide](https://verilator.org/guide/latest/)
 4. [QEMU RISC-V](https://www.qemu.org/docs/master/system/riscv/virt.html)
 5. [OpenSBI](https://github.com/riscv-software-src/opensbi)
+6. [Pre-GSoC Experiments Repository](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot)
