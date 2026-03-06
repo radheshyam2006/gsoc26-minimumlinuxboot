@@ -1,0 +1,45 @@
+Page Table Dump Analysis
+========================
+Captured from: QEMU pmemsave 0x81363000 4096
+Date: March 6, 2026
+Source: Root page table at physical address 0x81363000 (from satp = 0x901b600000081363)
+Mode: Sv48 (4-level page tables)
+
+Raw Output (from analyze_page_table.py):
+========================================
+File: /tmp/root_pt.bin
+Size: 4096 bytes (512 PTEs, each 8 bytes)
+Total valid entries: 64 (of 512)
+  - 6 POINTER entries → point to next-level page tables
+  - 58 LEAF entries → direct physical memory mappings
+
+Key Pointer Entries (these point to lower-level page tables):
+=============================================================
+Index  71: PTE 0x0000e38400000001 → next PT at 0x38e1000000000
+Index  97: PTE 0x699f136d69ab0331 → next PT (with User flag)
+Index 167: PTE 0x0000e6df00000041 → next PT at 0x39b7c00000000 (Accessed)
+Index 263: PTE 0x0000e38500000001 → next PT at 0x38e1400000000
+Index 359: PTE 0x0000e39400000001 → next PT at 0x38e5000000000
+Index 487: PTE 0x0000e39500000001 → next PT at 0x38e5400000000
+
+Key Leaf Entries (direct gigapage/terapage mappings):
+=====================================================
+Index   0: PTE 0x000000060000a1ff → phys 0x1800028000 (RWX, User+Global, Accessed+Dirty)
+Index  64: PTE 0x0000086a000081ed → phys 0x21a800020000 (WX, Global, Accessed+Dirty)
+Index 130: PTE 0x00000000685beecd → phys 0x1a16fb000 (WX, Accessed+Dirty)
+Index 224: PTE 0x000000040000a1ff → phys 0x1000028000 (RWX, User+Global, Accessed+Dirty)
+
+ANALYSIS
+========
+What this proves:
+1. We can dump physical memory from QEMU at the exact address pointed to by satp
+2. The root page table contains 512 entries (4096 bytes / 8 bytes per PTE)
+3. Most entries (448) are empty — Linux only maps the virtual address ranges it needs
+4. 6 pointer entries direct the MMU to next-level page tables for finer-grained mapping
+5. 58 leaf entries provide direct large-page mappings (terapages in Sv48)
+
+What this means for the project:
+- The state extraction tool must dump not just the root PT, but recursively follow
+  all pointer entries to capture the COMPLETE page table tree
+- For a full state save, we need to dump all of DRAM (which includes all page tables)
+- The pmemsave command in QEMU can be used to dump the entire physical address space

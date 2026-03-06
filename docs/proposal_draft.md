@@ -255,7 +255,28 @@ satp = 0x901b600000081363
 
 This is the single most important register for the project: it tells the MMU where the page tables live in physical memory. The synthetic init assembly would write this exact value (adjusted for Sv39) into `satp` to restore virtual memory.
 
-> Full results: [experiments/qemu-boot/](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot/tree/main/experiments/qemu-boot)
+### Experiment 4: Page Table Memory Dump & Decode ✅
+
+Used QEMU's `pmemsave` to dump 4096 bytes from the root page table address (`0x81363000`) and wrote a **Python PTE decoder** to analyze the structure:
+
+```
+Root Page Table: 512 entries (4096 bytes)
+├── 448 empty entries (unmapped virtual address space)
+├── 6 POINTER entries → next-level page tables
+└── 58 LEAF entries → direct physical memory mappings
+```
+
+Sample decoded entries:
+
+| Index | PTE | Type | Physical Address |
+|---|---|---|---|
+| 71 | `0x0000e38400000001` | POINTER → Level 1 PT | `0x38e10...` |
+| 167 | `0x0000e6df00000041` | POINTER → Level 1 PT | `0x39b7c...` |
+| 0 | `0x000000060000a1ff` | LEAF (RWX) | `0x1800028000` |
+
+**Tools built:** [`analyze_page_table.py`](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot/blob/main/experiments/qemu-state-dump/analyze_page_table.py) — parses raw memory dumps into decoded PTEs with permissions, flags, and physical addresses.
+
+> Full results: [experiments/qemu-state-dump/](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot/tree/main/experiments/qemu-state-dump)
 
 ---
 
