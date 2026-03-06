@@ -268,29 +268,41 @@ This is the single most important register for the project: it tells the MMU whe
 **Timezone:** IST (UTC+5:30)
 
 ### Relevant Skills
-<!-- TODO: List your actual coursework and projects -->
-- Computer Architecture
-- Operating Systems (virtual memory, page tables)
-- C/C++ programming
-- RISC-V / Verilog experience (if any)
+
+**Coursework:**
+- Computer Architecture & Processor Design
+- Operating Systems (virtual memory, page tables, system calls)
+- Digital Logic Design & VLSI
+
+**Technical Skills:**
+- **HDL:** Verilog, SystemVerilog — RTL design and simulation
+- **Programming:** C/C++, Python, RISC-V Assembly
+- **Tools:** Vivado, Cadence, Verilator, QEMU, GDB
+- **Platforms:** FPGA (Xilinx, AMD VCK5000), Linux kernel internals
+
+**Lab & Project Experience:**
+- **CVEST Lab, IIIT Hyderabad** — Building self-adaptive hardware systems, implementing ML models in RTL, FPGA emulation
+- **RISC-V Designs** — Prior work on RISC-V-based processor designs
+- **AMD VCK5000** — Acceleration of RAG workloads on FPGA platform
+- **ML-in-Hardware** — Training ML models and deploying inference pipelines in synthesizable RTL
 
 ### Pre-GSoC Work
 - [x] Booted RISC-V Linux in QEMU (Ubuntu 24.04, rv64, sv48)
 - [x] Extracted CPU state via QEMU Monitor (registers, CSRs)
 - [x] Extracted `satp` CSR via GDB — root page table at `0x81363000`
+- [x] Communicated with mentors (email + LinkedIn)
 - [ ] Built OpenPiton in Verilator
-- [ ] Communicated with mentors
+- [ ] Dump physical memory from QEMU and analyze page tables
 
 ---
 
 ## 8. Why This Project?
 
-<!-- TODO: Write 2-3 genuine paragraphs. Some angles:
-- Bridge between OS and hardware fascinates you
-- Want to solve real infrastructure problems in chip design
-- Interested in open-source silicon movement
-- Excited by the practical impact (saving days of engineer time)
--->
+This project sits at the exact intersection of my two deepest interests: **processor architecture** and **operating systems**. At the CVEST lab, I work on the hardware side — writing RTL, synthesizing designs, testing on FPGAs. But I've always been curious about the software that runs on top: how does Linux configure page tables? What does the kernel expect from the hardware at boot? This project forces me to understand both sides deeply, and I find that challenge genuinely exciting.
+
+What drew me specifically to MinimumLinuxBoot is the **practical impact**. Hardware verification is a real bottleneck — I've seen firsthand how long simulation runs take. The idea that we can boot Linux in QEMU in 3 minutes and then skip days of RTL simulation by injecting saved state is elegant and immediately useful. This isn't a theoretical exercise; it's infrastructure that real engineers at real chip companies would benefit from. The fact that I could build something during GSoC that gets merged into OpenPiton and saves researchers weeks of time — that motivates me more than any coursework project ever has.
+
+Finally, I'm drawn to the **open-source silicon movement**. Projects like OpenPiton, RISC-V, and FOSSi are democratizing chip design. Contributing to this ecosystem — building tools that help the community verify hardware faster — is exactly the kind of work I want to be doing as I start my career in hardware engineering.
 
 ---
 
