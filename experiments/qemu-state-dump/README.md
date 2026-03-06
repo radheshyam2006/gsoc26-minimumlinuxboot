@@ -1,48 +1,60 @@
-# QEMU State Extraction Experiment
+# QEMU State Extraction Experiments
 
 ## Goal
-Extract CPU registers, CSRs, and physical memory from a paused QEMU instance.
+Extract CPU state and physical memory from QEMU, analyze page tables — proving the state extraction approach works.
 
-## Methods
+## Status: 🔄 IN PROGRESS
 
-### Method 1: QEMU Monitor
+## Tools
+
+### `extract_state.py` — Prototype State Extractor
+Connects to QEMU via GDB and extracts all key registers + CSRs in one shot.
+
 ```bash
-# Press Ctrl+A, C to open monitor
-(qemu) info registers     # GPRs + PC
-(qemu) info tlb           # TLB state
-(qemu) pmemsave <addr> <size> <file>  # Dump memory region
+# 1. QEMU must be running with -s flag (from qemu-boot experiment)
+# 2. In a second terminal:
+python3 extract_state.py
+# Output: qemu_state.json with all register values
 ```
 
-### Method 2: GDB Remote Stub
-```bash
-# Start QEMU with GDB server
-qemu-system-riscv64 ... -s -S
+### `analyze_page_table.py` — Page Table Entry Decoder
+Parses a raw memory dump of a RISC-V page table and decodes each PTE.
 
-# In another terminal
-gdb-multiarch
-(gdb) target remote :1234
-(gdb) info registers            # All GPRs
-(gdb) p/x $satp                 # Read satp CSR
-(gdb) p/x $mstatus              # Read mstatus CSR
-(gdb) p/x $stvec                # Read stvec CSR
-(gdb) x/16x 0x80000000          # Examine memory
-(gdb) dump binary memory mem.bin 0x80000000 0x80001000  # Dump to file
+```bash
+# 1. In QEMU Monitor (Ctrl+A, C), dump the root page table:
+(qemu) pmemsave 0x81363000 4096 /tmp/root_pt.bin
+
+# 2. Analyze:
+python3 analyze_page_table.py /tmp/root_pt.bin
 ```
 
-### Method 3: QMP (QEMU Machine Protocol)
-```bash
-# Start QEMU with QMP socket
-qemu-system-riscv64 ... -qmp unix:/tmp/qmp.sock,server,nowait
+## How to Run This Experiment
 
-# Connect and query
-python3 -c "
-import socket, json
-s = socket.socket(socket.AF_UNIX)
-s.connect('/tmp/qmp.sock')
-# ... send QMP commands
-"
+### Step 1: Boot QEMU (from the qemu-boot experiment)
+```bash
+cd /mnt/c/Users/radhe/OneDrive/Documents/gsoc/generic\ minimumlinuxboot\ for\ rtl\ simulations
+bash experiments/qemu-boot/setup_and_boot.sh
+# Login: ubuntu / gsoc2026
+```
+
+### Step 2: Dump memory (in QEMU Monitor)
+Press `Ctrl+A, C` to open QEMU Monitor, then:
+```
+pmemsave 0x81363000 4096 /tmp/root_pt.bin
+```
+Press `Ctrl+A, C` again to return to Linux.
+
+### Step 3: Run state extractor (in a second WSL terminal)
+```bash
+cd /mnt/c/Users/radhe/OneDrive/Documents/gsoc/generic\ minimumlinuxboot\ for\ rtl\ simulations
+python3 experiments/qemu-state-dump/extract_state.py
+```
+
+### Step 4: Analyze page table (in the second WSL terminal)
+```bash
+python3 experiments/qemu-state-dump/analyze_page_table.py /tmp/root_pt.bin
 ```
 
 ## Results
 
-<!-- TODO: Add extracted register dumps, memory dumps, and analysis -->
+<!-- TODO: Add output after running -->
