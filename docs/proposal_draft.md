@@ -311,9 +311,11 @@ Sample decoded entries:
 - [x] Booted RISC-V Linux in QEMU (Ubuntu 24.04, rv64, sv48)
 - [x] Extracted CPU state via QEMU Monitor (registers, CSRs)
 - [x] Extracted `satp` CSR via GDB — root page table at `0x81363000`
+- [x] Dumped and decoded root page table (512 PTEs, 6 pointers, 58 leaves)
+- [x] Built prototype tools: `extract_state.py`, `analyze_page_table.py`
 - [x] Communicated with mentors (email + LinkedIn)
-- [ ] Built OpenPiton in Verilator
-- [ ] Dump physical memory from QEMU and analyze page tables
+- [ ] Reboot with Sv39 kernel config for OpenPiton compatibility
+- [ ] Build OpenPiton in Verilator
 
 ---
 
@@ -324,6 +326,24 @@ This project sits at the exact intersection of my two deepest interests: **proce
 What drew me specifically to MinimumLinuxBoot is the **practical impact**. Hardware verification is a real bottleneck — I've seen firsthand how long simulation runs take. The idea that we can boot Linux in QEMU in 3 minutes and then skip days of RTL simulation by injecting saved state is elegant and immediately useful. This isn't a theoretical exercise; it's infrastructure that real engineers at real chip companies would benefit from. The fact that I could build something during GSoC that gets merged into OpenPiton and saves researchers weeks of time — that motivates me more than any coursework project ever has.
 
 Finally, I'm drawn to the **open-source silicon movement**. Projects like OpenPiton, RISC-V, and FOSSi are democratizing chip design. Contributing to this ecosystem — building tools that help the community verify hardware faster — is exactly the kind of work I want to be doing as I start my career in hardware engineering.
+
+## 9. Challenges & Risks
+
+| Challenge | Risk Level | Mitigation |
+|---|---|---|
+| **Sv48 vs Sv39 mismatch** | High | QEMU defaults to Sv48 (4-level PT), but OpenPiton+Ariane supports only Sv39 (3-level). **Solution:** Compile the Linux kernel with `CONFIG_RISCV_SV39=y` so page tables are Sv39-compatible from the start. *Note: My initial experiments used sv48 (QEMU default) to validate the extraction approach. The final pipeline will use sv39.* |
+| **Memory map mismatch** | High | QEMU `virt` and OpenPiton may have different peripheral addresses (UART, PLIC, CLINT). **Solution:** Use a custom device tree matching OpenPiton's layout, or remap addresses during state transfer. |
+| **`satp` not in QEMU Monitor** | Medium | Discovered during Experiment 3 — QEMU Monitor doesn't expose `satp` on RISC-V. **Solution:** Already solved — use GDB remote stub instead. |
+| **OpenPiton build complexity** | Medium | OpenPiton uses a mix of Verilog, Perl, Python, and specific toolchain requirements. **Solution:** Start early during community bonding, document build steps. |
+| **Cold TLB/cache performance** | Low | After state restore, TLB and caches are empty. **Not a correctness issue** — hardware auto-refills via page table walks. Brief performance warmup (~microseconds), then normal speed. |
+| **Approach B init time** | Low | Synthetic assembly must execute instructions to write all state. May take minutes in RTL sim. **Acceptable** — still orders of magnitude faster than full boot (days → minutes). |
+
+### Fallback Plan
+
+If Approach B (synthetic assembly) proves too slow for large memory images:
+1. First try: Compress memory image and use a minimal decompression loop in the init assembly
+2. Second try: Use Verilator's `--savable` checkpoint format (Approach A) as a faster alternative
+3. Third try: Hybrid — use synthetic assembly for registers/CSRs, but load memory via Verilator's `$readmemh`
 
 ---
 
