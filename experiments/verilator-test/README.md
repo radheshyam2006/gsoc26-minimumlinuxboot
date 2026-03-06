@@ -1,45 +1,39 @@
-# OpenPiton Verilator Build Experiment
+# OpenPiton Verilator Build Attempt
 
-## Goal
-Build OpenPiton RTL simulation with Verilator and run a bare-metal test.
+## Status: ⚠️ Build started, Verilator version mismatch
 
-## What is a "Bare-Metal Test"?
+## Date: March 7, 2026
 
-A bare-metal test runs directly on the CPU hardware **without any OS**.  
-No Linux, no bootloader — just a tiny assembly program:
-
-```
-┌──────────────┐
-│  Bare Metal  │   "Hello World" assembly program
-│  Test (.S)   │   runs directly on OpenPiton CPU
-├──────────────┤
-│  OpenPiton   │   The actual RTL hardware
-│  CPU (RTL)   │   simulated in Verilator
-└──────────────┘
-   No OS, no boot, no kernel.
-   Just: CPU turns on → runs your program → done.
-```
-
-## Setup (Ubuntu/WSL)
-
+## Setup
 ```bash
-# 1. Install prerequisites
-sudo apt install verilator build-essential python3 perl
-
-# 2. Clone OpenPiton
-git clone https://github.com/PrincetonUniversity/openpiton.git
-cd openpiton
-
-# 3. Set up environment
+git clone --depth 1 https://github.com/PrincetonUniversity/openpiton.git ~/openpiton
+cd ~/openpiton
 source piton/piton_settings.bash
-
-# 4. Build Verilator model (single core)
 sims -sys=manycore -x_tiles=1 -y_tiles=1 -vlt_build
-
-# 5. Run a hello world test  
-sims -sys=manycore -x_tiles=1 -y_tiles=1 -vlt_run hello_world
 ```
 
-## Results
+## Result
+Build progressed through Verilog compilation but failed with 49 `NEEDTIMINGOPT` errors.
 
-<!-- TODO: Add build logs, test results, and any issues encountered -->
+### Root Cause
+Verilator version in Ubuntu 24.04 is too new for OpenPiton's codebase:
+- OpenPiton uses Verilog `#1` timing delays (e.g., `<= #1 value`)
+- Newer Verilator requires explicit `--timing` or `--no-timing` flag
+- OpenPiton's build system doesn't pass this flag
+
+### Error Example
+```
+%Error-NEEDTIMINGOPT: sas_intf.v:824:35: Use --timing or --no-timing 
+to specify how timing controls should be handled
+```
+
+### Possible Fixes (to try with mentor guidance)
+1. Add `--no-timing` to Verilator flags in OpenPiton's build config
+2. Install an older Verilator version (4.x) compatible with OpenPiton
+3. Check if OpenPiton's dev branch has fixed this for newer Verilator
+
+### Key Takeaway
+This is exactly the kind of build complexity documented in the proposal's
+Challenges & Risks section — building OpenPiton requires specific tool
+versions. This will be addressed during Community Bonding phase with
+mentor guidance.
