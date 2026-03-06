@@ -40,8 +40,9 @@ QEMU (fast boot)  ──→  Save State  ──→  Load into Verilator RTL Sim 
 - [x] Booted RISC-V Linux in QEMU (Ubuntu 24.04, kernel 6.17, rv64, sv48)
 - [x] Extracted CPU registers & CSRs via QEMU Monitor
 - [x] Documented key findings (sv48 vs Sv39, satp extraction needs GDB)
-- [ ] Extract `satp` CSR via GDB stub
-- [ ] Dump physical memory from QEMU
+- [x] Extracted `satp` CSR via GDB — root page table at `0x81363000`
+- [x] Communicated with mentors (email + LinkedIn)
+- [ ] Dump physical memory from QEMU and analyze page tables
 - [ ] Build OpenPiton with Verilator
 - [ ] Run bare-metal test on OpenPiton
 
