@@ -18,7 +18,14 @@ graph LR
     style C fill:#ff6b6b,color:#fff
 ```
 
-> Hardware engineers designing OpenPiton modify RTL (Verilog) and must verify their changes against a real Linux OS. But booting Linux in cycle-accurate RTL simulation takes **days to weeks** — making iterative development impractical.
+> Hardware engineers designing OpenPiton modify the RTL (Verilog), they must verify their changes against a real Linux OS to check if the changes are correct. But booting Linux in cycle-accurate RTL simulation takes **days to weeks** — making iterative development impractical.
+
+The goal is to boot Linux in minutes using QEMU, save the complete machine state, and inject it into the Verilator RTL simulation — so the RTL sim starts with Linux *already running*.
+
+The second part of the project is adding the necessary support in OpenPiton's simulation infrastructure to continue execution from the injected state and being able to launch user-space applications (e.g., `hello world`, `ls`, busybox) inside the resumed Linux system.
+
+
+
 
 ---
 
@@ -41,7 +48,7 @@ graph LR
 | | Traditional | MinimumLinuxBoot |
 |---|---|---|
 | Boot time | Days/Weeks | **Minutes** |
-| Engineering cycles | 1–2 tests/week | **Dozens/day** |
+| Testing Time | 1–2 tests/week | **Dozens/day** |
 | OS-level CI testing | Impossible | **Feasible** |
 
 ---
@@ -52,14 +59,14 @@ graph LR
 
 ```mermaid
 graph TD
-    subgraph "SAVED ✅ (Essential)"
+    subgraph "SAVING These is Essential"
         R["CPU Registers<br/>x0-x31, pc"]
         C["CSRs<br/>satp, mstatus, stvec..."]
         M["Physical Memory<br/>(entire DRAM)"]
         T["Timers<br/>mtime, mtimecmp"]
     end
     
-    subgraph "NOT SAVED ❌ (Auto-refills)"
+    subgraph "NOT SAVED can be Auto Refilled"
         TLB["TLB Cache"]
         L1["L1/L2 Cache"]
     end
@@ -71,6 +78,28 @@ graph TD
     TLB -.-> |"Hardware refills<br/>from page tables<br/>in memory"| WHY
     L1 -.-> |"Hardware refills<br/>from DRAM"| WHY
 ```
+
+#### Why we need to save These is 
+
+**CPU Registers (x0–x31, pc):**
+The general purpose registers will hold the kernel's live computation state like  function arguments, return addresses, stack pointers, and the program counter (`pc`) that tells the CPU *exactly* where to resume execution. Without restoring these, the kernel would start at the wrong instruction with garbage data in its registers, causing an immediate crash. The `pc` in particular points into the kernel's virtual address space (e.g., `0xffffffff80xxxxxx`), so it only makes sense once the MMU is also configured correctly (high amount of address space is in virtual memory).
+
+**Control and Status Registers (CSRs):**
+CSRs configure the CPU's privileged execution environment. The most critical is `satp`, which points the MMU to the root page table in physical memory — without it, virtual memory is disabled and every kernel address fault. `mstatus` controls the privilege mode (M/S/U) and interrupt enable bits; `stvec` tells the CPU where to jump on a trap (page fault, syscall, timer interrupt); `medeleg`/`mideleg` control which exceptions and interrupts are handled by S-mode (Linux) vs M-mode (OpenSBI). If any of these are wrong, the kernel either crashes on the first trap or runs at the wrong privilege level.
+
+**Physical Memory (entire DRAM):**
+Physical memory contains *everything* the kernel needs: the page tables that `satp` points to, the kernel's code and data segments, all allocated kernel structures (process table, file descriptors, slab caches), and any user-space programs loaded before the snapshot. Page tables are just data structures *in memory* — saving `satp` without saving the memory it points to is useless. This is the largest piece of state (~128 MB–1 GB) and dominates the transfer time.
+
+**Timers (mtime, mtimecmp):**
+The RISC-V timer (`mtime`) is like kernel's heartbeat (clock tick) — Linux uses it for scheduling, timeouts, and `jiffies`. `mtimecmp` is the comparator that triggers the next timer interrupt. If `mtimecmp` is left at zero after restore, a timer interrupt fires immediately (possibly before the kernel is ready), causing a crash or hang. Setting it correctly lets the kernel resume its normal scheduling tick.
+
+#### Why These Are NOT Saved
+
+**TLB (Translation Lookaside Buffer):**
+The TLB is a hardware cache of recent virtual-to-physical address translations. It is **not architecturally visible** — there is no RISC-V instruction to read or write individual TLB entries. When the CPU encounters a virtual address not in the TLB (a TLB miss), it automatically performs a **hardware page-table walk**, reading the page tables from physical memory to fill the TLB entry. Since we restore the full page tables in DRAM, the TLB will refill itself correctly on demand. The only cost is a brief warmup period (microseconds) as the first accesses trigger page walks instead of TLB hits.
+
+**L1/L2 Caches:**
+Caches are transparent hardware optimizations — they hold copies of data that also exists in DRAM. After a cold start, every memory access is a cache miss that fetches data from DRAM and populates the cache line automatically. Since we restore the full DRAM contents, caches will warm up naturally. Like the TLB, this causes a brief performance dip but has **zero correctness impact**.
 
 ### 3.2 End-to-End Flow
 
@@ -90,7 +119,7 @@ flowchart TD
     
     H --> I["5. Load as 'boot<br/>firmware' in OpenPiton<br/>Verilator sim"]
     I --> J["6. Init program restores<br/>all state, jumps to<br/>saved PC"]
-    J --> K["7. Linux kernel<br/>resumes execution! ✅"]
+    J --> K["7. Linux kernel<br/>resumes execution!"]
     K --> L["8. Run user-space<br/>apps (hello world, ls)"]
 ```
 
@@ -112,6 +141,18 @@ graph TD
         A5["⚠️ Breaks if RTL changes"]
     end
 ```
+
+**Approach B (Synthetic Assembly)** is our primary approach: a Python script generates a RISC-V `.S` assembly file that contains all the extracted state as hardcoded values. When this assembly runs inside the Verilator RTL sim, it writes each register, each CSR, and fills memory with the saved contents — then jumps to the saved `pc` to resume Linux. This is **portable** (works with any RTL, no dependency on Verilator internals) and **debuggable** (you can step through the assembly and see exactly what's being restored). The trade-off is speed: writing ~128 MB of memory instruction-by-instruction may take **10–30 minutes** in RTL simulation — but this is still orders of magnitude faster than the 2–7 days of a full boot.
+
+**Approach A (Verilator Checkpoint)** directly maps QEMU state to Verilator's internal signal names and creates a binary checkpoint file using Verilator's `--savable` feature. This would load **almost instantly** but is **fragile** — any change to RTL signal names, module hierarchy, or Verilator version would break the checkpoint format. The signal name mapping must also be maintained manually. This approach also changes if the RTL names or structure changes, making it impractical for active development where RTL is being modified frequently.
+
+**Estimated time comparison:**
+| | Approach B (Synthetic Assembly) | Approach A (Verilator Checkpoint) |
+|---|---|---|
+| State injection time | ~10–30 min in RTL sim | ~seconds (binary load) |
+| Setup effort | Medium (generate assembly) | High (map every signal name) |
+| Maintenance | None — ISA is stable | Must update on any RTL change |
+| Portability | Works with any simulator | Verilator-specific |
 
 > **Strategy:** Start with Approach B (more robust, easier to debug), explore Approach A as a stretch goal.
 
@@ -139,7 +180,13 @@ graph LR
     Q4 -.->|"Must align"| O4
 ```
 
-**Solution:** Compile Linux with a custom device tree matching OpenPiton's memory map, OR adjust addresses during state transfer.
+**The Challenge:** When Linux boots in QEMU, it reads the device tree to learn where peripherals are. If QEMU says "UART is at `0x10000000`" but OpenPiton puts UART at a different address, the kernel's UART driver will read/write to the wrong address after state transfer — causing I/O failures.
+
+**Solution — Custom Device Tree:** We compile Linux inside QEMU using a **custom device tree (`.dtb`)** that matches OpenPiton's actual peripheral layout (from `piton/design/xilinx/genesys2/devices_ariane.xml`). This way, when the kernel boots in QEMU, it already uses the correct addresses — and those same addresses work in OpenPiton.
+
+**Additionally — Sv39 mode:** The Linux kernel must be compiled with `CONFIG_RISCV_SV39=y` so it uses 3-level page tables compatible with Ariane's MMU. This is a kernel build config, not a QEMU setting — QEMU supports both Sv39 and Sv48, and the kernel chooses which to use. Combined with the custom device tree, these two changes make the QEMU-booted state fully compatible with OpenPiton.
+
+**Good news:** DRAM base already matches — both QEMU `virt` and OpenPiton+Ariane use `0x80000000`. This is the largest and most critical region.
 
 ---
 
@@ -148,25 +195,30 @@ graph LR
 ```mermaid
 gantt
     title Project Timeline (350 hours)
-    dateFormat  YYYY-MM-DD
+    dateFormat YYYY-MM-DD
+    axisFormat %b %d
     
-    section Phase 0
-    Community Bonding           :a0, 2026-05-01, 24d
+    section Phase 0 — Bonding
+    Community Bonding & Setup    :a0, 2026-05-01, 24d
     
-    section Phase 1 - Extract
-    QEMU State Extraction Tool  :a1, 2026-05-25, 21d
+    section Phase 1 — Extract
+    QEMU State Extraction Tool   :a1, 2026-05-25, 21d
     
-    section Phase 2 - Inject
-    Synthetic Init Assembly     :a2, after a1, 28d
+    section Phase 2 — Inject
+    Synthetic Init Assembly      :a2, 2026-06-15, 28d
     
-    section Phase 3 - Integrate
-    OpenPiton Integration       :a3, after a2, 21d
+    section Phase 3 — Integrate
+    OpenPiton Integration        :a3, 2026-07-13, 21d
     
-    section Phase 4 - Polish
-    Documentation & Cleanup     :a4, after a3, 14d
+    section Phase 4 — Polish
+    Documentation & Cleanup      :a4, 2026-08-03, 22d
 ```
 
 ### Detailed Breakdown
+
+subjected to change according to my exams and almanac of collage will update it,
+will update with dates also 
+
 
 | Phase | Weeks | Deliverable | Hours |
 |---|---|---|---|
@@ -202,6 +254,16 @@ flowchart LR
     D -.- D1["hello world, ls,<br/>busybox commands"]
 ```
 
+The validation is a **4-level progression** — each level builds on the previous one:
+
+1. **Register Comparison:** After injecting state into Verilator, read back all 32 GPRs + `pc` + critical CSRs and compare them byte-for-byte with the QEMU dump. If these don't match, the injection mechanism itself is broken.
+
+2. **Memory Checksum:** Compute SHA-256 of the DRAM dump from QEMU, then compute the same hash over Verilator's memory after loading. This confirms >100 MB of data transferred correctly without any bit errors.
+
+3. **Kernel Console Output:** Resume execution and check if Linux prints messages to the UART (serial console). If we see kernel log output, it means the CPU is executing, the MMU is translating virtual addresses correctly, and the UART driver is working — Linux is alive.
+
+4. **User-space App Execution:** Run pre-loaded programs (`hello world`, `ls`, busybox commands). If these work, it proves the entire stack — CPU, MMU, interrupts, scheduler, system calls, filesystem — is functional in RTL.
+
 ---
 
 ## 6. Preliminary Findings (Pre-GSoC Experiments)
@@ -228,7 +290,7 @@ Used QEMU Monitor (`info registers`) to extract full CPU state from a running Li
 | `stvec` | `0xffffffff80ddba94` | Linux kernel's trap handler address |
 | `mtvec` | `0x800004f8` | OpenSBI's M-mode trap handler |
 
-### Key Discoveries
+### Key Findings
 
 1. **`satp` CSR not available via QEMU Monitor** — requires GDB remote stub (`target remote :1234`) for extraction. This informs the tool design: the state extractor must use GDB protocol, not just the QEMU monitor.
 
@@ -283,49 +345,65 @@ Sample decoded entries:
 ## 7. About Me
 
 **Name:** Radheshyam Modampuri  
-**University:** IIIT Hyderabad  
-**Degree/Year:** Undergraduate, 3rd Year  
+**University:** IIIT Hyderabad (3rd Year, B.Tech ECE)  
 **GitHub:** [radheshyam2006](https://github.com/radheshyam2006)  
+**Email:** radheshyam.modampuri@students.iiit.ac.in  
 **Timezone:** IST (UTC+5:30)
 
 ### Relevant Skills
 
-**Coursework:**
-- Computer Architecture & Processor Design
-- Operating Systems (virtual memory, page tables, system calls)
-- Digital Logic Design & VLSI
+I work at the **CVEST Lab** (Center for VLSI and Embedded Systems Technologies) at IIIT Hyderabad, where my daily work involves writing Verilog, running synthesis, and testing designs on FPGAs. Here is what I bring to this project:
 
-**Technical Skills:**
-- **HDL:** Verilog, SystemVerilog — RTL design and simulation
-- **Programming:** C/C++, Python, RISC-V Assembly
-- **Tools:** Vivado, Cadence, Verilator, QEMU, GDB
-- **Platforms:** FPGA (Xilinx, AMD VCK5000), Linux kernel internals
+- **HDL & RTL Design:** I write Verilog regularly — simulating, synthesizing, and debugging hardware modules is something I do most weeks in lab. And currently I am working on self aware circuits basicaly writing ml models rtl to make asic(application is compensation of pvt variation in analog circuits).
+- **RISC-V:** I have worked on RISC-V processor designs as part of my coursework and understand the ISA, pipeline stages, and privilege modes.
+- **FPGA:** Real hardware experience on Xilinx FPGAs(xynq board for ml models for compensation of pvt variation in analog circuits) and the AMD VCK5000 platform, where I worked on accelerating RAG workloads(matrix multiplacation parlalising processe across multiple Tiles).
+- **Systems Software:** Comfortable with C/C++, Python, Linux internals, GDB debugging, and shell scripting.
+- **ML-in-Hardware:** Built inference pipelines in synthesizable RTL — this taught me how to bridge algorithm design and hardware constraints.
 
-**Lab & Project Experience:**
-- **CVEST Lab, IIIT Hyderabad** — Building self-adaptive hardware systems, implementing ML models in RTL, FPGA emulation
-- **RISC-V Designs** — Prior work on RISC-V-based processor designs
-- **AMD VCK5000** — Acceleration of RAG workloads on FPGA platform
-- **ML-in-Hardware** — Training ML models and deploying inference pipelines in synthesizable RTL
+**Relevant Courses:** Computer Architecture, Operating Systems (virtual memory, page tables, TLB), Digital Logic Design, VLSI.
 
-### Pre-GSoC Work
+### What I Have Already Done (Pre-GSoC)
+
 - [x] Booted RISC-V Linux in QEMU (Ubuntu 24.04, rv64, sv48)
 - [x] Extracted CPU state via QEMU Monitor (registers, CSRs)
-- [x] Extracted `satp` CSR via GDB — root page table at `0x81363000`
-- [x] Dumped and decoded root page table (512 PTEs, 6 pointers, 58 leaves)
+- [x] Extracted `satp` CSR via GDB — found root page table at `0x81363000`
+- [x] Dumped root page table memory and decoded all 512 PTEs
 - [x] Built prototype tools: `extract_state.py`, `analyze_page_table.py`
-- [x] Communicated with mentors (email + LinkedIn)
+- [x] Attempted OpenPiton Verilator build — identified and patched `--no-timing` issue for Verilator 5.x
 - [ ] Reboot with Sv39 kernel config for OpenPiton compatibility
-- [ ] Build OpenPiton in Verilator
+- [ ] Complete OpenPiton Verilator build (C++ linking issue, needs mentor guidance on Verilator version)
 
 ---
 
 ## 8. Why This Project?
 
-This project sits at the exact intersection of my two deepest interests: **processor architecture** and **operating systems**. At the CVEST lab, I work on the hardware side — writing RTL, synthesizing designs, testing on FPGAs. But I've always been curious about the software that runs on top: how does Linux configure page tables? What does the kernel expect from the hardware at boot? This project forces me to understand both sides deeply, and I find that challenge genuinely exciting.
+<!-- NOTE TO SELF: rewrite this in my own words before submission -->
 
-What drew me specifically to MinimumLinuxBoot is the **practical impact**. Hardware verification is a real bottleneck — I've seen firsthand how long simulation runs take. The idea that we can boot Linux in QEMU in 3 minutes and then skip days of RTL simulation by injecting saved state is elegant and immediately useful. This isn't a theoretical exercise; it's infrastructure that real engineers at real chip companies would benefit from. The fact that I could build something during GSoC that gets merged into OpenPiton and saves researchers weeks of time — that motivates me more than any coursework project ever has.
+I picked this project because it connects two things I actually care about — hardware design and the OS that runs on it. In my lab at IIIT Hyderabad, I write RTL and test it on FPGAs. But I have always wondered: what happens when Linux actually boots on the hardware I design? How does the kernel set up page tables? What does `satp` actually look like in a running system? This project gives me a reason to figure that out for real, not just in a textbook.
 
-Finally, I'm drawn to the **open-source silicon movement**. Projects like OpenPiton, RISC-V, and FOSSi are democratizing chip design. Contributing to this ecosystem — building tools that help the community verify hardware faster — is exactly the kind of work I want to be doing as I start my career in hardware engineering.
+The other thing that got me interested is how practical it is. When I read the project description and understood that RTL simulation takes days just to boot Linux, and that this project could bring that down to minutes — I immediately wanted to work on it. That is a real problem with a real solution. If this tool works, it does not just help one person — it helps every researcher using OpenPiton.Like a golden solution for them who works on computer architecture.
+
+I also like that this project lives in the open-source RISC-V ecosystem. I want to contribute to something that the community actually uses, not just a semester project that sits on a hard drive.
+
+## 8.1 Why Choose Me?
+
+I have already done more pre-GSoC work than most applicants would. Before writing this proposal, I:
+- Booted RISC-V Linux in QEMU and extracted real CPU state
+- Figured out on my own that `satp` is not in QEMU Monitor and used GDB instead
+- Dumped physical memory and decoded page table entries using tools I wrote (a bit AI help is there)
+- Attempted the OpenPiton Verilator build and debugged two of three build issues
+
+I did not just read about these things — I ran them, hit errors, fixed them, documented each step, and pushed everything to GitHub. I think that shows I can work independently and figure things out when something breaks.
+
+My lab experience at CVEST means I am comfortable with the full hardware workflow — RTL, synthesis, FPGA, debugging. And I am genuinely excited about this project, not just applying because it exists.
+
+## 8.2 Availability
+
+- **Community Bonding (May 1–24):** Fully available. No exams during this period.
+- **Coding Period (May 25–Aug 25):** I can commit **30–35 hours/week** during summer.
+- **Exam Conflicts:** <!-- TODO: fill in your exam dates here --> I will adjust my schedule around any mid-term exams and communicate this with mentors in advance.
+- **Communication:** Available daily on Gitter/email. Comfortable with weekly video calls for sync-ups.
+- **Post-GSoC:** I plan to stay involved with OpenPiton and maintain the tools I build.
 
 ## 9. Challenges & Risks
 
@@ -349,9 +427,14 @@ If Approach B (synthetic assembly) proves too slow for large memory images:
 
 ## References
 
-1. [RISC-V Privileged Specification](https://riscv.org/specifications/privileged-isa/)
-2. [OpenPiton](https://github.com/PrincetonUniversity/openpiton)
-3. [Verilator User Guide](https://verilator.org/guide/latest/)
-4. [QEMU RISC-V](https://www.qemu.org/docs/master/system/riscv/virt.html)
-5. [OpenSBI](https://github.com/riscv-software-src/opensbi)
-6. [Pre-GSoC Experiments Repository](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot)
+1. [hhp3 — RISC-V Virtual Memory (Sv39, Sv48, Sv57) YouTube Series](https://www.youtube.com/playlist?list=PL3by7evD3F51cIHBBmhfLznL-OYOyEGAu) — Excellent video lectures on RISC-V virtual memory that greatly helped my understanding of page tables and address translation
+2. [RISC-V Privileged Specification v20211203](https://riscv.org/specifications/privileged-isa/) — Chapters 4 (Sv39/Sv48 paging), 3 (Machine-level CSRs)
+3. J. Balkind et al., ["OpenPiton: An Open Source Manycore Research Framework,"](https://parallel.princeton.edu/papers/openpiton-asplos16.pdf) ASPLOS 2016
+4. [OpenPiton — Princeton Parallel Group](https://github.com/PrincetonUniversity/openpiton)
+5. [CVA6 (Ariane) RISC-V Core](https://github.com/openhwgroup/cva6) — The CPU core used in OpenPiton's RISC-V configuration
+6. [CVA6 User Manual](https://docs.openhwgroup.org/projects/cva6-user-manual/) — Documents Sv39 MMU, pipeline, and configuration options
+7. [Verilator User Guide](https://verilator.org/guide/latest/) — `--savable` checkpoint mechanism (Section 11)
+8. [QEMU RISC-V virt Machine](https://www.qemu.org/docs/master/system/riscv/virt.html) — Memory map, device tree structure
+9. [OpenSBI — RISC-V Open Source Supervisor Binary Interface](https://github.com/riscv-software-src/opensbi)
+10. A. Waterman, K. Asanović, "The RISC-V Instruction Set Manual, Volume II: Privileged Architecture," v20211203
+11. [Pre-GSoC Experiments Repository](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot)
