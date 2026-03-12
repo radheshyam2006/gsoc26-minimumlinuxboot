@@ -182,7 +182,7 @@ graph LR
 
 **The Challenge:** When Linux boots in QEMU, it reads the device tree to learn where peripherals are. If QEMU says "UART is at `0x10000000`" but OpenPiton puts UART at a different address, the kernel's UART driver will read/write to the wrong address after state transfer — causing I/O failures.
 
-**Solution — Custom Device Tree:** We compile Linux inside QEMU using a **custom device tree (`.dtb`)** that matches OpenPiton's actual peripheral layout (from `piton/design/xilinx/genesys2/devices_ariane.xml`). This way, when the kernel boots in QEMU, it already uses the correct addresses — and those same addresses work in OpenPiton.
+**Solution — Custom Device Tree:** We compile Linux inside QEMU using a **custom device tree (`.dtb`)** that matches OpenPiton's actual peripheral layout (from `piton/verif/env/manycore/devices_ariane.xml`). This way, when the kernel boots in QEMU, it already uses the correct addresses — and those same addresses work in OpenPiton.
 
 **Additionally — Sv39 mode:** The Linux kernel must be compiled with `CONFIG_RISCV_SV39=y` so it uses 3-level page tables compatible with Ariane's MMU. This is a kernel build config, not a QEMU setting — QEMU supports both Sv39 and Sv48, and the kernel chooses which to use. Combined with the custom device tree, these two changes make the QEMU-booted state fully compatible with OpenPiton.
 
@@ -369,9 +369,10 @@ I work at the **CVEST Lab** (Center for VLSI and Embedded Systems Technologies) 
 - [x] Extracted `satp` CSR via GDB — found root page table at `0x81363000`
 - [x] Dumped root page table memory and decoded all 512 PTEs
 - [x] Built prototype tools: `extract_state.py`, `analyze_page_table.py`
-- [x] Attempted OpenPiton Verilator build — identified and patched `--no-timing` issue for Verilator 5.x
+- [x] Identified and patched `--no-timing` issue for Verilator 5.x, before identifying Verilator 4.014 as the recommended version
+- [x] Successfully built Verilator 4.014 from source (required diagnosing a build failure and compiling Bison 3.5.1 from source to resolve incompatibilities with Bison 3.8.x)
+- [x] Successfully built OpenPiton with Verilator simulation using the custom-built version 4.014
 - [ ] Reboot with Sv39 kernel config for OpenPiton compatibility
-- [ ] Complete OpenPiton Verilator build (C++ linking issue, needs mentor guidance on Verilator version)
 
 ---
 
@@ -391,7 +392,7 @@ I have already done more pre-GSoC work than most applicants would. Before writin
 - Booted RISC-V Linux in QEMU and extracted real CPU state
 - Figured out on my own that `satp` is not in QEMU Monitor and used GDB instead
 - Dumped physical memory and decoded page table entries using tools I wrote (a bit AI help is there)
-- Attempted the OpenPiton Verilator build and debugged two of three build issues
+- Successfully built Verilator from source and compiled the OpenPiton simulation models, proactively overcoming toolchain incompatibilities (Bison 3.8.x vs Verilator 4.014) by building older dependencies from source.
 
 I did not just read about these things — I ran them, hit errors, fixed them, documented each step, and pushed everything to GitHub. I think that shows I can work independently and figure things out when something breaks.
 

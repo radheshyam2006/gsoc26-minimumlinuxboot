@@ -3,6 +3,8 @@
 set -e
 cd ~/openpiton
 export PITON_ROOT=~/openpiton
+export VERILATOR_ROOT=/home/radheshyam/verilator
+export PATH=$VERILATOR_ROOT/bin:$PATH
 source piton/piton_settings.bash
 export PATH=$PITON_ROOT/piton/tools/bin:$PATH
 
