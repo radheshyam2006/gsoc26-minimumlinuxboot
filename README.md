@@ -29,7 +29,7 @@ QEMU (fast boot)  ──→  Save State  ──→  Load into Verilator RTL Sim 
 │   │   ├── register_dump.txt    ← CPU register dump with analysis
 │   │   ├── system_info.txt      ← cpuinfo, meminfo, uname
 │   │   └── setup_and_boot.sh   ← Reproducible boot script
-│   ├── qemu-state-dump/     ← State extraction via GDB (next)
+│   ├── qemu-state-dump/     ← State extraction via GDB (done with sv48 need to do for sv39)
 │   └── verilator-test/      ← OpenPiton Build & Toolchain setup (Resolving GCC 13+ strictness)
 └── references/
     └── key_references.md    ← Specs, docs, YouTube resources
