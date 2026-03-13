@@ -30,7 +30,7 @@ QEMU (fast boot)  ──→  Save State  ──→  Load into Verilator RTL Sim 
 │   │   ├── system_info.txt      ← cpuinfo, meminfo, uname
 │   │   └── setup_and_boot.sh   ← Reproducible boot script
 │   ├── qemu-state-dump/     ← State extraction via GDB (next)
-│   └── verilator-test/      ← OpenPiton Verilator build (planned)
+│   └── verilator-test/      ← OpenPiton Build & Toolchain setup (Resolving GCC 13+ strictness)
 └── references/
     └── key_references.md    ← Specs, docs, YouTube resources
 ```
@@ -43,8 +43,9 @@ QEMU (fast boot)  ──→  Save State  ──→  Load into Verilator RTL Sim 
 - Documented key findings (Sv48 vs Sv39, satp extraction needs GDB).
 - Extracted satp CSR via GDB — root page table at 0x81363000.
 - Dumped physical memory from QEMU and analyzed page tables.
-- Built OpenPiton with Verilator.
-- Run bare-metal test on OpenPiton.
+- Built OpenPiton RTL model (`Vcmp_top`) successfully with Verilator 4.014.
+- Patched OpenPiton build scripts (`sims`, `my_top.cpp`) for Verilator 4.014 compatibility.
+- Currently resolving modern RISC-V cross-compiler (GCC 13+) strictness for compiling bare-metal benchmarks.
 
 ## Key Findings So Far
 

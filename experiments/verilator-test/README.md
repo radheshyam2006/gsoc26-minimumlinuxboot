@@ -1,57 +1,42 @@
-# OpenPiton Verilator Build Attempt
+# OpenPiton Verilator Build & Toolchain Validation
 
-## Status: ⚠️ RTL compilation succeeds, C++ linking fails (Verilator version mismatch)
+## Status: COMPLETED (Migrating to Native Linux)
 
-## Date: March 7, 2026
+## Goal
+Build the cycle-accurate RTL model of OpenPiton (`Vcmp_top`) using Verilator and prepare the cross-compilation toolchain for bare-metal RISC-V programs.
 
-## Environment
-- **OS:** Ubuntu 24.04 on WSL2
-- **Verilator:** 5.020 (2024-01-01)
-- **GCC:** 13.2.0
+## Scripts & Tools
 
-## Setup
-```bash
-git clone --depth 1 https://github.com/PrincetonUniversity/openpiton.git ~/openpiton
-export PITON_ROOT=$HOME/openpiton
-source $PITON_ROOT/piton/piton_settings.bash
-$PITON_ROOT/piton/tools/bin/sims -sys=manycore -x_tiles=1 -y_tiles=1 -vlt_build
-```
+### `repair_sims.py`
+- **What it does:** Edits the OpenPiton `sims` Perl script to permanently remove modern Verilator 5.x flags (`-Wno-TIMESCALEMOD`, `--no-timing`).
+- **Why we use it:** The OpenPiton source accidentally merges syntax meant for newest Verilators with an older codebase that fails parsing them.
 
-## Build Progress
+### `fix_cpp.py`
+- **What it does:** Modifies `piton/tools/verilator/my_top.cpp` by converting `char*` declaration in `init_jbus_model_call` to `const char*`.
+- **Why we use it:** Modern C++ compilers (like GCC 13+ on Ubuntu 24.04) enforce strict const-correctness. The original 2018 code violated this, halting the build.
 
-### Issue 1: `cc1` not found ✅ FIXED
-```
-bw_cpp: fatal error: cannot execute 'cc1'
-```
-**Fix:** `sudo ln -s /usr/libexec/gcc/x86_64-linux-gnu/13/cc1 /usr/bin/cc1`
+### `patch_riscv_tests.py`
+- **What it does:** Iterates through `tmp/riscv-tests` Makefiles and strategically inserts the `_zicsr` architecture extension flag (`-march=rv64gc_zicsr`). It also suppresses implicit int/declaration warnings.
+- **Why we use it:** Modern versions of GCC separated CSR instructions into a distinct module (`zicsr`). Older C code like Dhrystone failed compiling without it due to modernized compiler strictness.
 
-### Issue 2: `NEEDTIMINGOPT` errors ✅ FIXED
-Verilator 5.x requires explicit `--timing` or `--no-timing` flag.
-OpenPiton's Verilog uses `#1` timing delays.
-```
-%Error-NEEDTIMINGOPT: Use --timing or --no-timing
-```
-**Fix:** Patched `sims,2.0` to add `--no-timing` flag (see `patch_openpiton.py`)
+## Major Dependency Challenges & Resolutions
 
-### Issue 3: C++ linking fails ❌ UNRESOLVED
-After Verilator successfully compiles all RTL to C++, the `make` step fails:
-```
-undefined reference to `main'
-make: *** [Vcmp_top__pch.h.fast.gch] Error 1
-```
-This is a Verilator 5.x precompiled header (PCH) issue — OpenPiton's build
-system wasn't designed for Verilator 5.x's PCH generation.
+This phase exposed significant toolchain fragility across two decades of software (2018-2024).
 
-### Possible fixes (needs mentor guidance)
-1. Use Verilator 4.x (what OpenPiton was tested with)
-2. Disable PCH in Verilator 5.x build
-3. Check OpenPiton's CI/CD for recommended Verilator version
+1. **Verilator Version Mismatch (Precompiled Headers)**
+   - **Issue:** Initially attempted with Verilator 5.x on Ubuntu. RTL compiled to C++, but standard linker `make` failed due to unpredictable Precompiled Header (PCH) behaviors unique to Verilator 5.
+   - **Fix:** Downgraded to **Verilator 4.014**, which provides the exact stability OpenPiton was originally validated against.
 
-## Tools Created
-- `patch_openpiton.py` — Patches sims,2.0 to add --no-timing flag
-- `build_openpiton.sh` — Build script with proper environment setup
+2. **Bison 3.8.x Conflict**
+   - **Issue:** Ubuntu 24.04 ships with Bison 3.8+, which deprecates syntax heavily utilized by Verilator 4.014's parser.
+   - **Fix:** Manually compiled and installed **Bison 3.5.1** from source to bridge the gap.
 
-## Key Takeaway
-Building OpenPiton requires specific tool versions aligned with their CI.
-This will be resolved during Community Bonding with mentor guidance on
-the recommended development environment.
+3. **RISC-V Toolchain Missing Libraries (Ubuntu APT)**
+   - **Issue:** The standard `gcc-riscv64-unknown-elf` package on Ubuntu `apt` is fragmented and lacks necessary Newlib headers (`string.h`, `libc-header-start.h`), failing all OpenPiton benchmarks.
+   - **Fix:** Abandoned `apt`. Transitioned manually to the **xPack RISC-V Toolchain (v15.2.0-1)**, an independently maintained binary distribution ensuring complete Newlib compatibility.
+
+## Result
+We successfully acquired the compiled executable RTL (`obj_dir/Vcmp_top`) and documented exactly how the RISC-V build chain fails on modern OSs.
+
+## Next Steps
+To guarantee clean builds that align exactly with the OpenPiton maintainers, we are migrating this entire project away from WSL to a **Native Linux (Ubuntu 22.04) Environment**, utilizing all the scripts/patches created in this folder during the final repository build!

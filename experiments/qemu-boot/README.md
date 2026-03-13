@@ -3,9 +3,21 @@
 ## Goal
 Boot RISC-V Linux in QEMU and extract CPU/system state — proving we can capture the state needed for the MinimumLinuxBoot project.
 
-## Status: ✅ COMPLETED
+## Status: COMPLETED
 
 Successfully booted Ubuntu 24.04 LTS on RISC-V 64-bit in QEMU.
+
+## Scripts & Tools
+
+### `setup_and_boot.sh`
+This bash script automates the downloading and booting of a pre-built RISC-V Ubuntu Cloud Image. 
+- **What it does:** It downloads the Ubuntu image, resizes it, creates a `cloud-init` configuration (to set the default username/password), and launches `qemu-system-riscv64` with the necessary flags for a `virt` machine.
+- **Why we use it:** Instead of manually configuring QEMU disks and networks every time, this script ensures we boot the exact same environment consistently in 1-3 minutes. It exposes a GDB server on port 1234 (`-s`) for the next phase.
+
+## Dependencies Encountered
+- `qemu-system-misc`: Provides `qemu-system-riscv64`.
+- `cloud-image-utils`: Provides `cloud-localds` to build the config drive for the Ubuntu image.
+- `gdb-multiarch`: Required for connecting to the GDB stub later.
 
 ## Setup (Ubuntu/WSL)
 
@@ -41,13 +53,10 @@ Extracted via QEMU Monitor (`Ctrl+A, C` → `info registers`):
 | `mtvec` | `0x800004f8` | OpenSBI's trap handler |
 
 ### Key Observations
-1. **`pc` is in kernel space** (`0xffffffff...`) — confirms Linux kernel is running in supervisor mode
-2. **Exception delegation** (`medeleg`) shows page faults and environment calls are delegated to S-mode — this is how Linux handles traps
-3. **`satp` CSR is NOT visible** in `info registers` — need GDB stub to extract it (next experiment)
-4. **`info tlb` not supported** on QEMU RISC-V — TLB state must be inferred from page tables in memory
-5. **MMU mode is sv48** — OpenPiton+Ariane uses Sv39, so kernel config must be adjusted
+1. **`pc` is in kernel space** (`0xffffffff...`) — confirms Linux kernel is running in supervisor mode.
+2. **`satp` CSR is MISSING** in QEMU `info registers`. QEMU's monitor does not expose all RISC-V CSRs, which created a hard dependency on using GDB.
+3. **MMU mode is sv48** — OpenPiton+Ariane uses Sv39, indicating that our final target Linux kernel must be compiled with `CONFIG_RISCV_SV39=y`.
 
 ## Next Steps
-- [ ] Use GDB to extract `satp` CSR (contains page table root + MMU mode)
-- [ ] Dump physical memory with `pmemsave`
-- [ ] Analyze page table structure from memory dump
+- Use GDB to extract the missing `satp` CSR.
+- Extract physical memory.

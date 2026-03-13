@@ -338,6 +338,19 @@ Sample decoded entries:
 
 **Tools built:** [`analyze_page_table.py`](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot/blob/main/experiments/qemu-state-dump/analyze_page_table.py) — parses raw memory dumps into decoded PTEs with permissions, flags, and physical addresses.
 
+### Experiment 5: RTL Compilation & Toolchain Alignment ✅
+
+Successfully built the OpenPiton cycle-accurate RTL model (`Vcmp_top`) using Verilator and resolved severe modern toolchain incompatibilities.
+
+**Verilator & Bison Conflict:**
+- Identified that Verilator 5.x breaks OpenPiton's C++ linking due to Precompiled Header (PCH) changes and unsupported `#1` timing delays. 
+- Downgraded to Verilator 4.014 for stability.
+- Ubuntu 24.04 ships with Bison 3.8+, which fails to build Verilator 4.014. **Resolution:** Manually compiled Bison 3.5.1 from source to successfully build the exact Verilator version required by OpenPiton.
+
+**Modern RISC-V GCC (13+) Strictness:**
+- The standard Ubuntu `apt` packages lacked the Newlib C library (`string.h`). **Resolution:** Migrated to the professional standalone **xPack RISC-V Toolchain (v15.2.0-1)**.
+- Modern GCC strictly requires the `_zicsr` architecture extension for CSR instructions, causing OpenPiton's `riscv-tests` benchmarks to fail. **Resolution:** Wrote a Python patch script (`patch_riscv_tests.py`) to surgically insert `-march=rv64gc_zicsr` into the test Makefiles and suppress implicit C warnings for older benchmark code (Dhrystone).
+
 > Full results: [experiments/qemu-state-dump/](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot/tree/main/experiments/qemu-state-dump)
 
 ---
@@ -371,7 +384,7 @@ I work at the **CVEST Lab** (Center for VLSI and Embedded Systems Technologies) 
 - [x] Built prototype tools: `extract_state.py`, `analyze_page_table.py`
 - [x] Identified and patched `--no-timing` issue for Verilator 5.x, before identifying Verilator 4.014 as the recommended version
 - [x] Successfully built Verilator 4.014 from source (required diagnosing a build failure and compiling Bison 3.5.1 from source to resolve incompatibilities with Bison 3.8.x)
-- [x] Successfully built OpenPiton with Verilator simulation using the custom-built version 4.014
+- [ ] Successfully built OpenPiton with Verilator simulation using the custom-built version 4.014 (still going on)
 - [ ] Reboot with Sv39 kernel config for OpenPiton compatibility
 
 ---
