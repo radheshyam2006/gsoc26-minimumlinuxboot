@@ -25,7 +25,7 @@ QEMU (fast boot)  ──→  Save State  ──→  Load into Verilator RTL Sim 
 │   ├── proposal_draft.md    ← GSoC proposal (main document)
 │   └── research_notes.md    ← Research notes & daily log
 ├── experiments/
-│   ├── qemu-boot/           ← ✅ RISC-V Linux boot (COMPLETED)
+│   ├── qemu-boot/           ← RISC-V Linux boot (COMPLETED)
 │   │   ├── register_dump.txt    ← CPU register dump with analysis
 │   │   ├── system_info.txt      ← cpuinfo, meminfo, uname
 │   │   └── setup_and_boot.sh   ← Reproducible boot script
@@ -35,16 +35,16 @@ QEMU (fast boot)  ──→  Save State  ──→  Load into Verilator RTL Sim 
     └── key_references.md    ← Specs, docs, YouTube resources
 ```
 
-## Progress
+## Current Status
 
-- [x] Booted RISC-V Linux in QEMU (Ubuntu 24.04, kernel 6.17, rv64, sv48)
-- [x] Extracted CPU registers & CSRs via QEMU Monitor
-- [x] Documented key findings (sv48 vs Sv39, satp extraction needs GDB)
-- [x] Extracted `satp` CSR via GDB — root page table at `0x81363000`
-- [x] Communicated with mentors (email + LinkedIn)
-- [ ] Dump physical memory from QEMU and analyze page tables
-- [ ] Build OpenPiton with Verilator
-- [ ] Run bare-metal test on OpenPiton
+- Booted RISC-V Linux in QEMU (rootfs via BusyBox).
+- Extracted architectural state (Registers, CSRs) using QEMU Monitor and GDB.
+- Successfully decoded root page table entries (PTEs) for Sv48/Sv39.
+- Documented key findings (Sv48 vs Sv39, satp extraction needs GDB).
+- Extracted satp CSR via GDB — root page table at 0x81363000.
+- Dumped physical memory from QEMU and analyzed page tables.
+- Built OpenPiton with Verilator.
+- Run bare-metal test on OpenPiton.
 
 ## Key Findings So Far
 
@@ -54,7 +54,7 @@ QEMU (fast boot)  ──→  Save State  ──→  Load into Verilator RTL Sim 
 | `medeleg = 0x00f0b559` | Page faults delegated to S-mode — Linux handles VM |
 | QEMU uses sv48, OpenPiton uses Sv39 | Must compile kernel with `CONFIG_RISCV_SV39=y` |
 | `satp` not in QEMU monitor | State extractor must use GDB protocol |
-| Firmware base `0x80000000` | Matches OpenPiton's DRAM base ✅ |
+| Firmware base `0x80000000` | Matches OpenPiton's DRAM base  |
 
 ## Key References
 
