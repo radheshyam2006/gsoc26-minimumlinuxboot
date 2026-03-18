@@ -99,7 +99,7 @@ The original OpenPiton build was designed for older toolchains (GCC 7, Verilator
 |--------------------|----------------------|
 | `ci/build-riscv-gcc.sh` (2+ hours) | `apt install gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf` |
 | `ci/install-verilator.sh` (Verilator 4.014 + Bison 3.5.1) | `apt install verilator` (5.x) |
-| `ci/install-fesvr.sh` | Keep + `<cstdint>` patch |
+| `ci/install-fesvr.sh` | Keep (no apt package) + `<cstdint>` patch |
 | `ci/install-spike.sh` | Keep (no apt package) |
 
 ## Test Result
