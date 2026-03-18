@@ -1,10 +1,13 @@
 #!/bin/bash
 # OpenPiton Verilator build script
+# NOTE: Use clean_build.sh for a complete build with all patches applied
 set -e
+
 cd ~/openpiton
 export PITON_ROOT=~/openpiton
-export VERILATOR_ROOT=/home/radheshyam/verilator
-export PATH=$VERILATOR_ROOT/bin:$PATH
+export ARIANE_ROOT="$PITON_ROOT/piton/design/chip/tile/ariane"
+export RISCV="/usr"  # Use system RISC-V toolchain
+
 source piton/piton_settings.bash
 export PATH=$PITON_ROOT/piton/tools/bin:$PATH
 
@@ -16,5 +19,5 @@ echo ""
 # Clean previous build
 rm -rf build
 
-# Build
+# Build Verilator model
 sims -sys=manycore -x_tiles=1 -y_tiles=1 -vlt_build

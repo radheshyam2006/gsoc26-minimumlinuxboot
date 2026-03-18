@@ -1,42 +1,116 @@
-# OpenPiton Verilator Build & Toolchain Validation
+# OpenPiton Verilator Build Modernization
 
-## Status: COMPLETED (Migrating to Native Linux)
+## Status: WORKING on Ubuntu 24.04 LTS + Verilator 5.020 + GCC 13
 
-## Goal
-Build the cycle-accurate RTL model of OpenPiton (`Vcmp_top`) using Verilator and prepare the cross-compilation toolchain for bare-metal RISC-V programs.
+Successfully built `Vcmp_top` and ran RISC-V ISA tests on the Verilator RTL model.
 
-## Scripts & Tools
+## Quick Start
 
-### `repair_sims.py`
-- **What it does:** Edits the OpenPiton `sims` Perl script to permanently remove modern Verilator 5.x flags (`-Wno-TIMESCALEMOD`, `--no-timing`).
-- **Why we use it:** The OpenPiton source accidentally merges syntax meant for newest Verilators with an older codebase that fails parsing them.
+```bash
+# Install prerequisites
+sudo apt install gcc g++ verilator gcc-riscv64-unknown-elf \
+    picolibc-riscv64-unknown-elf git python3 autoconf
 
-### `fix_cpp.py`
-- **What it does:** Modifies `piton/tools/verilator/my_top.cpp` by converting `char*` declaration in `init_jbus_model_call` to `const char*`.
-- **Why we use it:** Modern C++ compilers (like GCC 13+ on Ubuntu 24.04) enforce strict const-correctness. The original 2018 code violated this, halting the build.
+# Build everything
+./clean_build.sh
 
-### `patch_riscv_tests.py`
-- **What it does:** Iterates through `tmp/riscv-tests` Makefiles and strategically inserts the `_zicsr` architecture extension flag (`-march=rv64gc_zicsr`). It also suppresses implicit int/declaration warnings.
-- **Why we use it:** Modern versions of GCC separated CSR instructions into a distinct module (`zicsr`). Older C code like Dhrystone failed compiling without it due to modernized compiler strictness.
+# Run a test
+cd ~/openpiton
+export PITON_ROOT=$HOME/openpiton
+export ARIANE_ROOT=$PITON_ROOT/piton/design/chip/tile/ariane
+source piton/piton_settings.bash
+source piton/ariane_setup.sh
+sims -sys=manycore -x_tiles=1 -y_tiles=1 -ariane -vlt_run \
+    -image_diag_root=$ARIANE_ROOT/tmp/riscv-tests/build/isa \
+    -image_diag_name=rv64ui-p-add
+```
 
-## Major Dependency Challenges & Resolutions
+## Why This Modernization?
 
-This phase exposed significant toolchain fragility across two decades of software (2018-2024).
+The original OpenPiton build was designed for older toolchains (GCC 7, Verilator 4.014, Bison 3.5). Modern Ubuntu 24.04 ships with GCC 13, Verilator 5.020, and Bison 3.8 - causing multiple build failures. This project patches the build to work with modern system packages, eliminating the need to compile toolchains from source.
 
-1. **Verilator Version Mismatch (Precompiled Headers)**
-   - **Issue:** Initially attempted with Verilator 5.x on Ubuntu. RTL compiled to C++, but standard linker `make` failed due to unpredictable Precompiled Header (PCH) behaviors unique to Verilator 5.
-   - **Fix:** Downgraded to **Verilator 4.014**, which provides the exact stability OpenPiton was originally validated against.
+## Issues Found & Fixes
 
-2. **Bison 3.8.x Conflict**
-   - **Issue:** Ubuntu 24.04 ships with Bison 3.8+, which deprecates syntax heavily utilized by Verilator 4.014's parser.
-   - **Fix:** Manually compiled and installed **Bison 3.5.1** from source to bridge the gap.
+### 1. Verilator 5.x Compatibility
 
-3. **RISC-V Toolchain Missing Libraries (Ubuntu APT)**
-   - **Issue:** The standard `gcc-riscv64-unknown-elf` package on Ubuntu `apt` is fragmented and lacks necessary Newlib headers (`string.h`, `libc-header-start.h`), failing all OpenPiton benchmarks.
-   - **Fix:** Abandoned `apt`. Transitioned manually to the **xPack RISC-V Toolchain (v15.2.0-1)**, an independently maintained binary distribution ensuring complete Newlib compatibility.
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `-lstdc++` linker error | Was in CFLAGS, needs LDFLAGS | `patch_openpiton.py` |
 
-## Result
-We successfully acquired the compiled executable RTL (`obj_dir/Vcmp_top`) and documented exactly how the RISC-V build chain fails on modern OSs.
+**Why Verilator 5.x instead of downgrading to 4.014?**
+- Avoids Bison 3.5.1 dependency (Ubuntu has 3.8.2, incompatible with Verilator 4.014)
+- Future-proof - prevents dependency rot
+- Available via apt = easier CI/CD
 
-## Next Steps
-To guarantee clean builds that align exactly with the OpenPiton maintainers, we are migrating this entire project away from WSL to a **Native Linux (Ubuntu 22.04) Environment**, utilizing all the scripts/patches created in this folder during the final repository build!
+### 2. GCC 13 C++ Strictness
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `my_top.cpp` const error | `char*` passed where `const char*` expected | `fix_cpp.py` |
+| `fesvr/device.h` error | Missing `#include <cstdint>` for `uint64_t` | `patch_fesvr.py` |
+
+**Why these break on GCC 13?**
+- GCC 13 enforces ISO C++ const-correctness strictly
+- `uint64_t` no longer implicitly available - requires explicit header
+
+### 3. RISC-V Toolchain (GCC 12+)
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| CSR instruction errors | GCC 12 requires explicit `zicsr` extension | `-march=rv64gc_zicsr` |
+| Multiple definition errors | GCC 10 default changed to `-fno-common` | Added `-fcommon` |
+| Missing libc headers | Ubuntu apt package incomplete | Use `picolibc-riscv64-unknown-elf` |
+
+**Why picolibc instead of building GCC from source (ci/build-riscv-gcc.sh)?**
+- Available via apt - no 2+ hour compile
+- Provides complete Newlib-compatible headers
+- System package = automatic security updates
+
+### 4. Idempotency Bug (Critical)
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Makefiles corrupted on re-run | Original `patch_riscv_tests.py` patterns didn't match after first run | Rewrote with regex + "already patched" checks |
+| Duplicate patching | Both `ariane_build_tools.sh` (sed) and `patch_riscv_tests.py` modified same files | Unified in new idempotent script |
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `clean_build.sh` | Unified build - handles all patching automatically |
+| `patch_riscv_tests.py` | Patches ISA/benchmark Makefiles (idempotent) |
+| `patch_openpiton.py` | Patches sims script for Verilator 5.x |
+| `patch_fesvr.py` | Adds `<cstdint>` to fesvr headers |
+| `fix_cpp.py` | Fixes const-correctness in my_top.cpp |
+
+## Compatibility Matrix
+
+| Component | Version | Source |
+|-----------|---------|--------|
+| Ubuntu | 24.04 LTS | - |
+| GCC | 13.3.0 | System |
+| Verilator | 5.020 | `apt install verilator` |
+| RISC-V GCC | 13.2.0 | `apt install gcc-riscv64-unknown-elf` |
+| picolibc | System | `apt install picolibc-riscv64-unknown-elf` |
+
+## CI Modernization Summary
+
+| Old (source build) | New (system packages) |
+|--------------------|----------------------|
+| `ci/build-riscv-gcc.sh` (2+ hours) | `apt install gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf` |
+| `ci/install-verilator.sh` (Verilator 4.014 + Bison 3.5.1) | `apt install verilator` (5.x) |
+| `ci/install-fesvr.sh` | Keep + `<cstdint>` patch |
+| `ci/install-spike.sh` | Keep (no apt package) |
+
+## Test Result
+
+```
+$ sims -sys=manycore -x_tiles=1 -y_tiles=1 -ariane -vlt_run \
+    -image_diag_root=$ARIANE_ROOT/tmp/riscv-tests/build/isa \
+    -image_diag_name=rv64ui-p-add
+
+Reset complete
+750000250 : Simulation -> (terminated by reaching max cycles = 1500000)
+```
+
+Build and test execution verified on Ubuntu 24.04 + Verilator 5.020 + GCC 13.
