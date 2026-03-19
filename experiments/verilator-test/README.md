@@ -21,8 +21,7 @@ export ARIANE_ROOT=$PITON_ROOT/piton/design/chip/tile/ariane
 source piton/piton_settings.bash
 source piton/ariane_setup.sh
 sims -sys=manycore -x_tiles=1 -y_tiles=1 -ariane -vlt_run \
-    -image_diag_root=$ARIANE_ROOT/tmp/riscv-tests/build/isa \
-    -image_diag_name=rv64ui-p-add
+    -precompiled -asm_diag_name=rv64ui-p-add
 ```
 
 ## Why This Modernization?
@@ -73,6 +72,22 @@ The original OpenPiton build was designed for older toolchains (GCC 7, Verilator
 | Makefiles corrupted on re-run | Original `patch_riscv_tests.py` patterns didn't match after first run | Rewrote with regex + "already patched" checks |
 | Duplicate patching | Both `ariane_build_tools.sh` (sed) and `patch_riscv_tests.py` modified same files | Unified in new idempotent script |
 
+### 5. Boot ROM Sign-Extension Bug (RTL Fix)
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Core hits `WFI` at `0xfff1010040` (TIMEOUT) | On `rv64`, `li s0, 1; slli s0, s0, 31` sign-extends logic to `0xffffffff80000000`. Trap handler hangs. | Shifted bits to isolate `0x0000000080000000` accurately. |
+| Python compile failed on Ubuntu 24.04 | `gen_rom.py` expects `python` and uses `map` which returns an iterator. | Converted to `python3` and `list(map(...))`. |
+
+**Why this matters for correct Bootload:**
+- When running `sims` over bare ELFs, passing `-precompiled -asm_diag_name` generates assembly mappings and loads the tests at `0x80000000`. We proved the core wasn't fetching from correct DRAM_BASE. Fixed assembly:
+  ```assembly
+  li s0, 1
+  slli s0, s0, 31
+  slli s0, s0, 32    # Shift out the sign-extended upper bits
+  srli s0, s0, 32    # Shift back to get 0x0000000080000000
+  ```
+
 ## Scripts
 
 | Script | Purpose |
@@ -106,11 +121,11 @@ The original OpenPiton build was designed for older toolchains (GCC 7, Verilator
 
 ```
 $ sims -sys=manycore -x_tiles=1 -y_tiles=1 -ariane -vlt_run \
-    -image_diag_root=$ARIANE_ROOT/tmp/riscv-tests/build/isa \
-    -image_diag_name=rv64ui-p-add
+    -precompiled -asm_diag_name=rv64ui-p-add
 
 Reset complete
-750000250 : Simulation -> (terminated by reaching max cycles = 1500000)
+Info: spc(0) thread(0) Hit Good trap
+18562250: Simulation -> PASS (HIT GOOD TRAP)
 ```
 
 Build and test execution verified on Ubuntu 24.04 + Verilator 5.020 + GCC 13.
