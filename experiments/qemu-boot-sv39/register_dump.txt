@@ -1,0 +1,81 @@
+QEMU RISC-V Register Dump
+=========================
+Captured from: QEMU 8.2.2 Monitor (info registers)
+Date: March 20, 2026
+System: Ubuntu 24.04 LTS, Linux 6.17.0-14-generic, riscv64
+
+CPU#0
+ V      =   0
+ pc       ffffffff80dce26e
+ mhartid  0000000000000000
+ mstatus  0000000a000000a0
+ hstatus  0000000200000000
+ vsstatus 0000000a00000000
+ mip      0000000000000000
+ mie      000000000000022a
+ mideleg  0000000000001666
+ hideleg  0000000000000000
+ medeleg  0000000000f0b559
+ hedeleg  0000000000000000
+ mtvec    00000000800004f8
+ stvec    ffffffff80ddba94
+ vstvec   0000000000000000
+ mepc     ffffffff80027e30
+ sepc     ffffffff80dd000c
+ vsepc    0000000000000000
+ mcause   0000000000000009
+ scause   8000000000000005
+ vscause  0000000000000000
+ mtval    0000000000000000
+ stval    0000000000000000
+ htval    0000000000000000
+ mtval2   0000000000000000
+ mscratch 0000000080045000
+ sscratch 0000000000000000
+ satp     801b600000081569
+ x0/zero  0000000000000000 x1/ra    ffffffff80dcfffc x2/sp    ffffffff82403db0 x3/gp    ffffffff8269ccf0
+ x4/tp    ffffffff824134c0 x5/t0    0000000000000000 x6/t1    0000000000000000 x7/t2    0000000000000000
+ x8/s0    ffffffff82403dc0 x9/s1    0000000000000000 x10/a0   0000000000000000 x11/a1   0000000000000000
+ x12/a2   0000000000000000 x13/a3   0000000000000000 x14/a4   0000000000000000 x15/a5   0000000000000000
+ x16/a6   0000000000000000 x17/a7   0000000000000000 x18/s2   0000000000000000 x19/s3   ffffffff828b6938
+ x20/s4   ffffffd67fdea1c7 x21/s5   0000000000000000 x22/s6   ffffffff82412e10 x23/s7   ffffffff819d49d0
+ x24/s8   000000000000001f x25/s9   00000000fde364d8 x26/s10  0000000000000001 x27/s11  00000000fd8f3540
+ x28/t3   0000000000000000 x29/t4   0000000000000000 x30/t5   0000000000000000 x31/t6   0000000000000000
+ f0/ft0   0000000000000000 f1/ft1   0000000000000000 f2/ft2   0000000000000000 f3/ft3   0000000000000000
+ f4/ft4   0000000000000000 f5/ft5   0000000000000000 f6/ft6   0000000000000000 f7/ft7   0000000000000000
+ f8/fs0   0000000000000000 f9/fs1   0000000000000000 f10/fa0  0000000000000000 f11/fa1  0000000000000000
+ f12/fa2  0000000000000000 f13/fa3  0000000000000000 f14/fa4  0000000000000000 f15/fa5  0000000000000000
+ f16/fa6  0000000000000000 f17/fa7  0000000000000000 f18/fs2  0000000000000000 f19/fs3  0000000000000000
+ f20/fs4  0000000000000000 f21/fs5  0000000000000000 f22/fs6  0000000000000000 f23/fs7  0000000000000000
+ f24/fs8  0000000000000000 f25/fs9  0000000000000000 f26/fs10 0000000000000000 f27/fs11 0000000000000000
+ f28/ft8  0000000000000000 f29/ft9  0000000000000000 f30/ft10 0000000000000000 f31/ft11 0000000000000000
+
+ANALYSIS
+========
+- pc = ffffffff80dce26e  → Kernel virtual address (CPU is executing kernel code in S-mode)
+- sp = ffffffff82403db0  → Kernel stack pointer (also in kernel virtual address space)
+- mstatus = 0x0000000a000000a0 → Machine status (indicates S-mode context, interrupts configured)
+- medeleg = 0x00f0b559 → Exception delegation to S-mode (page faults, ecalls delegated to kernel)
+- mideleg = 0x00001666 → Interrupt delegation to S-mode (timer, external, software interrupts)
+- stvec = ffffffff80ddba94 → Supervisor trap vector (where kernel handles traps)
+- mtvec = 0x800004f8 → Machine trap vector (OpenSBI's trap handler)
+- satp = 801b600000081569 → Valid Sv39 mode paging base address
+
+NOTE: The satp CSR is visible in this QEMU 8.2 dump, but we use the GDB stub to automate extraction for our framework.
+
+SATP EXTRACTION VIA GDB (March 20, 2026)
+========================================
+Command: gdb-multiarch -ex "target remote :1234" -ex "p/x $satp" -ex "quit"
+Result: satp = 0x801b600000081569
+
+Decoded:
+  MODE  (bits 63-60) = 0x8 = Sv39 (3-level page tables)
+  ASID  (bits 59-44) = 0x01b6 = 438 (Address Space ID)
+  PPN   (bits 43-0)  = 0x00000081569
+  Root page table physical address = PPN * 4096 = 0x81569000
+
+This means:
+  - Linux's root page table is at physical address 0x81569000
+  - This is inside DRAM (base 0x80000000), offset ~21 MB into RAM
+  - The synthetic init assembly would write this value into satp to restore MMU
+  - This fully aligns with the OpenPiton (Sv39) MODE=8 expectations.

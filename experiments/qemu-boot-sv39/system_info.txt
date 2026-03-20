@@ -1,0 +1,38 @@
+QEMU RISC-V Linux System Info
+=============================
+Captured from running Ubuntu 24.04 on QEMU RISC-V
+Date: March 20, 2026
+
+=== uname -a ===
+Linux ubuntu 6.17.0-14-generic #14.1~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Jan 29 13:59:41 UTC riscv64 riscv64 riscv64 GNU/Linux
+
+=== cat /proc/cpuinfo ===
+processor       : 0
+hart            : 0
+isa             : rv64imafdch_zicbom_zicboz_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zaamo_zalrsc_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_sstc_svadu
+mmu             : sv39
+mvendorid       : 0x0
+marchid         : 0x0
+mimpid          : 0x0
+hart isa        : rv64imafdch_zicbom_zicboz_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zaamo_zalrsc_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_sstc_svadu
+
+=== cat /proc/meminfo (first 10 lines) ===
+MemTotal:        2003556 kB
+MemFree:         1580964 kB
+MemAvailable:    1803248 kB
+Buffers:           16800 kB
+Cached:           268000 kB
+SwapCached:            0 kB
+Active:           271596 kB
+Inactive:          40960 kB
+Active(anon):      35516 kB
+Inactive(anon):        0 kB
+
+ANALYSIS
+========
+- ISA: rv64imafdch = 64-bit RISC-V with Integer, Multiply, Atomic, Float, Double, Compressed, Hypervisor
+- MMU: sv39 = 3-level page tables (39-bit virtual address space)
+  - Note: This matches the OpenPiton+Ariane requirements perfectly!
+- 1 hart (1 CPU core) — good for initial single-core scope
+- ~2 GB RAM, ~1.5 GB free (Linux using ~500 MB)
+- Kernel: 6.17.0-14-generic (standard Ubuntu kernel for RISC-V)

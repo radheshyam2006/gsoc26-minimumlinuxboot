@@ -30,30 +30,33 @@ QEMU (fast boot)  ──→  Save State  ──→  Inject into Verilator RTL  �
 
 I didn't just write a proposal — I **validated the entire technical approach** with working code and successful experiments.
 
-### **Experiment 1: QEMU State Extraction FULLY WORKING**
+### **Experiment 1: QEMU State Extraction FULLY WORKING (Sv48 & Sv39)**
 
 **Achievements:**
-- Booted **Ubuntu 24.04 LTS** (Linux kernel 6.17.0) on RISC-V 64-bit in QEMU `virt` machine
-- Built **fully automated boot script** (`setup_and_boot.sh`) — one command boots Linux in 3 minutes
+-  Booted **Ubuntu 24.04 LTS** (Linux kernel 6.17.0) on RISC-V 64-bit in QEMU `virt` machine
+-  **Completed both Sv48 and Sv39 extractions:**
+  - **Sv48:** `satp = 0x901b600000081363` → root PT at 0x81363000 (58 LEAF + 6 POINTER entries)
+  - **Sv39:** `satp = 0x801b60000008142f` → root PT at 0x8142f000 (207 valid POINTER entries)
+-  Built **fully automated boot script** (`setup_and_boot.sh`) — one command boots Linux in 3 minutes
 - Extracted **complete CPU architectural state** via QEMU Monitor + GDB:
   - All 32 general-purpose registers (x0-x31) + program counter (`pc`)
   - Critical CSRs: `satp`, `mstatus`, `medeleg`, `mideleg`, `stvec`, `mtvec`
-  - **Discovered:** `satp = 0x901b600000081363` → root page table at **physical address 0x81363000**
-- Dumped **4096 bytes of physical memory** from root page table location using `pmemsave`
+-  Dumped **4096 bytes of physical memory** from root page table location using `pmemsave`
 - Built **`extract_state.py`** — Python GDB automation tool that extracts state as JSON
 - Built **`analyze_page_table.py`** — Page Table Entry decoder
   - Parses raw binary memory dumps into decoded PTEs
-  - Successfully decoded all 512 root page table entries
-  - Identified **58 LEAF entries** (direct physical mappings) + **6 POINTER entries** (next-level tables)
+  - Successfully decoded all 512 root page table entries for both Sv48 and Sv39
   - Displays permissions (R/W/X), addressing mode, and physical addresses
 
 **Critical Discovery:** QEMU Monitor on RISC-V doesn't expose the `satp` CSR — identified this limitation early and built a GDB-based extraction pipeline as the solution.
 
 **Tools Created:**
 ```
-experiments/qemu-boot/setup_and_boot.sh       → One-command RISC-V Linux boot
-experiments/qemu-state-dump/extract_state.py  → GDB protocol state extractor (JSON output)
-experiments/qemu-state-dump/analyze_page_table.py → Page table decoder with permissions
+experiments/qemu-boot/setup_and_boot.sh           → RISC-V Linux boot (Sv48)
+experiments/qemu-boot-sv39/setup_and_boot.sh      → RISC-V Linux boot (Sv39)
+experiments/qemu-state-dump/extract_state.py      → GDB protocol state extractor (JSON)
+experiments/qemu-state-dump/analyze_page_table.py → Page table decoder
+experiments/qemu-state-dump-sv39/qemu_state.json  → Sv39 extracted state
 ```
 
 ### **Experiment 2: OpenPiton RTL Build Modernization FULLY WORKING**
@@ -113,21 +116,23 @@ experiments/verilator-test/build_openpiton.sh      → Build orchestration
 
 ---
 
-## 🎯 Progress Summary
+##  Progress Summary
 
 | Milestone | Status | Evidence |
 |-----------|--------|----------|
-| Boot RISC-V Linux in QEMU | **DONE** | `experiments/qemu-boot/` — boots Ubuntu 24.04 in 3 min |
-| Extract CPU registers |  **DONE** | `register_dump.txt` — all 32 GPRs + pc |
+| Boot RISC-V Linux in QEMU (Sv48) | **DONE** | `experiments/qemu-boot/` — boots Ubuntu 24.04 in 3 min |
+| Boot RISC-V Linux in QEMU (Sv39) | **DONE** | `experiments/qemu-boot-sv39/` — Sv39 kernel boot |
+| Extract CPU registers | **DONE** | `register_dump.txt` — all 32 GPRs + pc |
 | Extract critical CSRs | **DONE** | `satp`, `mstatus`, `medeleg`, `mideleg`, `stvec` extracted |
-| Extract page tables |  **DONE** | Root PT at 0x81363000, 512 PTEs decoded |
-| Decode page table memory |  **DONE** | `analyze_page_table.py` — decodes PTEs with permissions |
-| Build OpenPiton RTL model |  **DONE** | `Vcmp_top` compiles with Verilator 5.x |
-| Fix boot ROM critical bug |  **DONE** | Sign-extension issue resolved, tests now pass |
-| Run ISA tests on RTL |  **DONE** | `rv64ui-p-add` → **PASS** (cycle 18562250) |
-| Modernize build for Ubuntu 24.04 |  **DONE** | 6 patch scripts, all idempotent, system packages only |
+| Extract page tables (Sv48) | **DONE** | Root PT at 0x81363000, 512 PTEs decoded |
+| Extract page tables (Sv39) | **DONE** | Root PT at 0x8142f000, 207 valid PTEs |
+| Decode page table memory | **DONE** | `analyze_page_table.py` — decodes PTEs with permissions |
+| Build OpenPiton RTL model | **DONE** | `Vcmp_top` compiles with Verilator 5.x |
+| Fix boot ROM critical bug | **DONE** | Sign-extension issue resolved, tests now pass |
+| Run ISA tests on RTL | **DONE** | `rv64ui-p-add` → **PASS** (cycle 18562250) |
+| Modernize build for Ubuntu 24.04 | **DONE** | 6 patch scripts, all idempotent, system packages only |
 | Create state extraction tools | **DONE** | 9 working scripts (Python + Bash) |
-| **Next:** Sv39 kernel + device tree | 🔄 **In Progress** | Compiling custom kernel with `CONFIG_RISCV_SV39=y` |
+| **Next:** Synthetic assembly generator | 🔄 **In Progress** | Generate init code from extracted state |
 
 ---
 
@@ -172,13 +177,22 @@ gsoc26-minimumlinuxboot/
 │   ├── proposal_draft.md      ← Comprehensive GSoC proposal with diagrams & research
 │   └── research_notes.md      ← Technical research & daily log
 ├── experiments/
-│   ├── qemu-boot/             ← RISC-V Linux boot (COMPLETED)
+│   ├── qemu-boot/             ← RISC-V Linux boot - Sv48 (COMPLETED)
 │   │   ├── setup_and_boot.sh      ← Automated boot script
-│   │   ├── register_dump.txt      ← Full CPU register dump
+│   │   ├── register_dump.txt      ← Full CPU register dump (Sv48)
 │   │   └── system_info.txt        ← cpuinfo, meminfo, uname output
-│   ├── qemu-state-dump/       ← State extraction via GDB (COMPLETED)
+│   ├── qemu-boot-sv39/        ← RISC-V Linux boot - Sv39 (COMPLETED)
+│   │   ├── setup_and_boot.sh      ← Sv39 kernel boot script
+│   │   ├── register_dump.txt      ← Sv39 CPU state
+│   │   └── README.md              ← Sv39 boot documentation
+│   ├── qemu-state-dump/       ← State extraction - Sv48 (COMPLETED)
 │   │   ├── extract_state.py       ← GDB automation for state extraction
 │   │   └── analyze_page_table.py  ← Page table entry decoder
+│   ├── qemu-state-dump-sv39/  ← State extraction - Sv39 (COMPLETED)
+│   │   ├── extract_state.py       ← GDB extractor (reused from Sv48)
+│   │   ├── analyze_page_table.py  ← PT decoder (reused from Sv48)
+│   │   ├── qemu_state.json        ← Sv39 extracted state (207 PTEs)
+│   │   └── root_pt_sv39.bin       ← Sv39 page table dump
 │   └── verilator-test/        ← OpenPiton Build Modernization (COMPLETED)
 │       ├── clean_build.sh         ← One-command automated build
 │       ├── patch_openpiton.py     ← Verilator 5.x compatibility

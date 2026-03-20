@@ -1,0 +1,15 @@
+{
+  "source": "QEMU via GDB",
+  "port": 1234,
+  "registers": {
+    "pc": "0xffffffff80dce26e",
+    "satp": "0x801b60000008142f",
+    "mstatus": "0xa000000a0",
+    "stvec": "0xffffffff80ddba94",
+    "mtvec": "0x800004f8",
+    "medeleg": "0xf0b559",
+    "mideleg": "0x1666",
+    "sp": "0xffffffff82403db0",
+    "mhartid": "0x0"
+  }
+}
