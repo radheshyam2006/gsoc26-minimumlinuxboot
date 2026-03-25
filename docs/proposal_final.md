@@ -115,7 +115,24 @@ graph LR
 | Testing throughput | 1–2 tests/week | **Dozens/day** |
 | OS-level CI/regression | Impractical | **Feasible** |
 
-The second part of the project adds the necessary support in OpenPiton's simulation infrastructure to continue execution from the injected state, enabling user-space applications (e.g., `hello world`, `ls`, busybox) to run inside the resumed Linux system.
+The second part of the project adds the necessary support in OpenPiton's simulation infrastructure to continue execution from the injected state, enabling user-space applications (e.g., `hello world`, `ls`, `cat`, busybox shell) to run inside the resumed Linux system.
+
+### Project Objectives & Community Benefit
+
+**What will users do with this tool?**
+
+Once MinimumLinuxBoot is functional, any OpenPiton researcher or hardware engineer can:
+
+| Use Case | What It Proves |
+|----------|----------------|
+| Run `hello world` | Basic user-space execution: CPU, MMU, syscalls all work |
+| Run `ls` | Filesystem + VFS + directory syscalls functional |
+| Run `cat /proc/cpuinfo` | Proc filesystem + kernel data structures intact |
+| Launch busybox shell | Full POSIX shell: pipes, redirects, job control |
+| Run custom test binaries | Application-specific RTL validation against real OS |
+| OS-level CI/CD | Automated regression testing after every RTL commit |
+
+**Community impact:** This tool transforms OpenPiton from a platform where Linux testing is a multi-day event into one where it is a routine part of the development cycle. Every researcher using OpenPiton+Ariane — or any future core integrated into OpenPiton — benefits from this infrastructure.
 
 ---
 
@@ -217,10 +234,10 @@ graph LR
         Q4["0x80000000: DRAM"]
     end
     
-    subgraph "OpenPiton SoC"
-        O1["CLINT: from devices_ariane.xml"]
-        O2["PLIC: from devices_ariane.xml"]
-        O3["UART: from devices_ariane.xml"]
+    subgraph "OpenPiton SoC (from devices_ariane.xml)"
+        O1["0xfff1020000: CLINT"]
+        O2["0xfff1100000: PLIC"]
+        O3["0xfff0c2c000: UART"]
         O4["0x80000000: DRAM ✅ (matches)"]
     end
     
@@ -230,7 +247,9 @@ graph LR
     Q4 -.->|"Already aligned"| O4
 ```
 
-**Solution:** Compile a **custom device tree (`.dtb`)** matching OpenPiton's actual peripheral layout (from `piton/verif/env/manycore/devices_ariane.xml`, as confirmed by Prof. Balkind). Boot QEMU with this DTB so the kernel uses OpenPiton-compatible addresses from the start.
+The above addresses are taken from OpenPiton's peripheral address map defined in [`piton/verif/env/manycore/devices_ariane.xml`](https://github.com/PrincetonUniversity/openpiton/blob/master/piton/verif/env/manycore/devices_ariane.xml). Note: these are **physical addresses** — they are independent of the virtual memory mode (Sv39/Sv48). QEMU's `virt` machine uses different physical addresses for the same peripherals, hence the need for DTB alignment.
+
+**Solution:** Compile a **custom device tree (`.dtb`)** matching OpenPiton's actual peripheral layout from `devices_ariane.xml` (as confirmed by Prof. Jon). Boot QEMU with `-dtb custom.dtb` so the kernel uses OpenPiton-compatible addresses from the start — no post-transfer patching needed.
 
 **Sv39 alignment:** The kernel must be compiled with `CONFIG_RISCV_SV39=y` to produce 3-level page tables compatible with Ariane's MMU (Ariane does not support Sv48).
 
@@ -274,11 +293,11 @@ gantt
 
 | Phase | Weeks | Key Deliverables | Hours | Complexity |
 |---|---|---|---|---|
-| **0. Community Bonding** | May 1–24 | Mentor alignment, finalize Sv39+custom DTB boot, dev environment | — | Low |
-| **1. State Extraction** | May 25 – Jun 14 (Wk 1–3) | Production `qemu_state_extractor.py` — GPRs, CSRs, full DRAM dump, timer state. Automated pipeline with JSON output. | 70h | Medium |
-| **2. State Injection** | Jun 15 – Jul 12 (Wk 4–7) | `init_benchmark.S` generator — RISC-V assembly that restores complete machine state in RTL simulation. Validate register/CSR restore. | 100h | **High** |
+| **0. Community Bonding** | May 1–24 | ✅ Sv39 boot & state extraction already done. Remaining: mentor alignment, custom DTB for OpenPiton addresses, finalize state file format (JSON + binary), set up CI. | — | Low |
+| **1. State Extraction** | May 25 – Jun 14 (Wk 1–3) | Production `qemu_state_extractor.py` — GPRs, CSRs, full DRAM dump, timer state. Automated pipeline with JSON + binary output. One-command `make extract` workflow. | 70h | Medium |
+| **2. State Injection** | Jun 15 – Jul 12 (Wk 4–7) | `init_generator.py` → `init_restore.S` — RISC-V assembly that restores complete machine state in RTL simulation. Validate register/CSR restore. | 100h | **High** |
 | *Midterm* | Jul 6–10 | ✅ State extraction working. ✅ Init assembly loads state into RTL. ✅ Kernel prints to console after resume. | | |
-| **3. Integration** | Jul 13 – Aug 2 (Wk 8–10) | End-to-end workflow in OpenPiton infra. User-space apps running after resume (`hello world`, `ls`). | 100h | **High** |
+| **3. Integration** | Jul 13 – Aug 2 (Wk 8–10) | End-to-end workflow in OpenPiton infra. User-space apps running after resume (`hello world`, `ls`, `cat /proc/cpuinfo`, busybox shell). One-command `make boot-fast` tool. | 100h | **High** |
 | **4. Documentation** | Aug 3–24 (Wk 11–13) | Tutorial, cleaned code, upstream PR to OpenPiton, blog post. | 40h | Low |
 | *Final Eval* | Aug 17–24 | Submit final work product and evaluation. | | |
 
@@ -289,21 +308,26 @@ gantt
 - Phase 3 involves integrating with OpenPiton's existing simulation infrastructure (Perl/Python build system, Verilator C++ testbench), which has non-trivial complexity.
 
 ### Stretch Goals (if ahead of schedule)
-- Multi-core (multi-hart) state save/restore
-- Verilator checkpoint approach (Approach A)
-- Performance benchmarking framework for restored Linux
+
+**1. Multi-Hart (Multi-Core) State Save/Restore:**
+Extending from single-hart to multi-hart is significantly harder than scaling state linearly. Each hart has its own GPRs, CSRs (`satp`, `mstatus`, `mhartid`), and per-CPU kernel structures that must be restored independently. The critical challenge is **inter-hart synchronization**: all harts must resume in a coordinated manner — if hart 0 begins executing while hart 1 is still loading registers, the kernel's IPI (inter-processor interrupt) mechanism will fire prematurely, causing deadlocks or panics. This directly extends the project from OpenPiton's single-tile to its manycore architecture, and builds toward the distributed simulation work explored in projects like Metro-MPI++ (GSoC 2025).
+
+**2. Verilator Checkpoint Approach (Approach A):**
+Direct mapping of QEMU state to Verilator's `--savable` checkpoint format for near-instant load (~seconds vs. ~10–30 min).
+
+**3. Performance Benchmarking:**
+Measure IPC, cycle counts, and TLB/cache warmup overhead after state injection. Comparing `hello world` execution cycles between a full-boot simulation and a restored simulation would quantify the tool's fidelity. This is challenging because running the full-boot baseline itself takes days, and RTL simulation overhead makes per-cycle measurement expensive.
 
 ---
 
 ## 5. Technical Risks & Mitigation
 
-### Top 2 Technical Risks
 
 **Risk 1: Memory Map Mismatch Between QEMU and OpenPiton (High)**
 
 QEMU's `virt` machine and OpenPiton's SoC have different peripheral addresses for CLINT, PLIC, and UART. If the kernel is booted with QEMU's default device tree, its drivers will attempt I/O at wrong addresses after state transfer.
 
-- **Primary mitigation:** Boot QEMU with a custom device tree matching OpenPiton's `devices_ariane.xml` layout (simulation-specific map, as confirmed by Prof. Balkind).
+- **Primary mitigation:** Boot QEMU with a custom device tree matching OpenPiton's `devices_ariane.xml` layout (simulation-specific map, as confirmed by Prof. Jon).
 - **Plan B:** If building a custom DTB proves difficult, remap affected addresses during the state transfer step by patching the DRAM image — replace QEMU peripheral addresses with OpenPiton addresses in the kernel's driver data structures.
 
 **Risk 2: Synthetic Assembly Init Time for Large Memory Images (Medium)**
@@ -321,6 +345,9 @@ Restoring ~128 MB of DRAM instruction-by-instruction in RTL simulation may take 
 | Sv48 vs Sv39 page table mismatch | Medium | Already solved — kernel compiled with `CONFIG_RISCV_SV39=y` and validated in pre-GSoC experiments |
 | Cold TLB/cache after restore | Low | Not a correctness issue — hardware auto-refills. Brief warmup only. |
 | OpenPiton build system complexity | Low | Already navigated and fixed 7 toolchain issues in pre-GSoC work |
+| OpenSBI version mismatch | Medium | QEMU may bundle a newer OpenSBI than OpenPiton expects. Different OpenSBI versions handle trap delegation (`medeleg`/`mideleg`) differently. Mitigation: pin OpenSBI version and verify CSR values match between environments. |
+| Kernel uses unsupported extensions | Medium | Newer kernels may use CSR extensions (`sstc`, `svadu`) that Ariane does not implement, causing illegal-instruction traps. Mitigation: use a minimal kernel config and verify ISA string compatibility. |
+| Spike/FESVR not in apt packages | Low | `spike` (RISC-V ISA simulator) and `riscv-fesvr` are not available as system packages on Ubuntu — must be built from source from `riscv-isa-sim`. Already handled in our build modernization work. |
 
 ---
 
@@ -351,12 +378,12 @@ I have already validated every critical component of the technical approach befo
 
 ### Build Modernization & Bug Fixes
 
-The OpenPiton+Ariane Verilator build had significant dependency rot on modern systems. I fixed it to work cleanly on **Ubuntu 24.04 LTS** with **Verilator 5.020** and **GCC 13**, entirely using system packages. Key contributions:
+The OpenPiton+Ariane Verilator build had significant dependency rot on modern systems. I fixed it to work cleanly on **Ubuntu 24.04 LTS** with **Verilator 5.020** and **GCC 13**, entirely using system packages (note: `spike` and `riscv-fesvr` are not available as apt packages and must be built from source). Key contributions:
 
 - **Resolved 7 critical modern toolchain incompatibilities:** Verilator 5.x linker flag placement, GCC 13 const-correctness, `_zicsr` ISA extension requirement, picolibc migration, and build script idempotency.
 - **Found and fixed a boot ROM rv64 sign-extension bug** that caused the Ariane core to hit WFI after 10 instructions — this was a complete show-stopper that blocked all RISC-V ISA tests.
-- **Validated with passing ISA tests:** `rv64ui-p-add` → `PASS (HIT GOOD TRAP)` at cycle 18,562,250.
-- **Build time reduced from 2+ hours to under 10 minutes.** PR ready pending Prof. Balkind's final go-ahead.
+- **Validated with passing ISA tests:** `rv64ui-p-add` → `PASS (HIT GOOD TRAP)` at cycle 18,562,250 (last line of simulation log confirms successful completion).
+- **Build time reduced from 2+ hours to under 10 minutes.** PR ready pending Prof. Jon's final go-ahead.
 
 All changes implemented following Prof. Balkind's code review feedback — compiler PATH/RISCV validation, `ariane_build_tools.sh` cleanup, Verilator 5 warning suppression.
 
@@ -368,7 +395,7 @@ All changes implemented following Prof. Balkind's code review feedback — compi
   - Root page table at physical address `0x81569000`
   - All GPRs, critical CSRs (mstatus, stvec, mtvec, medeleg, mideleg, mepc, sepc, mip, mie, mcause, scause, mhartid)
 - **Decoded page table entries** from physical memory — identified valid pointer entries mapping the kernel's virtual address space.
-- **Discovered** that QEMU Monitor does not expose `satp` on RISC-V — designed GDB-based extraction pipeline as the solution.
+- **Built GDB-based extraction pipeline** for automated, scriptable state extraction. While `satp` is visible in QEMU Monitor's `info registers` output (confirmed on QEMU 8.2), the Monitor interface is interactive and not easily scriptable — our GDB stub approach enables fully automated extraction via Python scripting.
 
 ### Summary
 
@@ -384,7 +411,7 @@ All changes implemented following Prof. Balkind's code review feedback — compi
 **Links:**
 - Experiment notes & tools: [github.com/radheshyam2006/gsoc26-minimumlinuxboot](https://github.com/radheshyam2006/gsoc26-minimumlinuxboot)
 - OpenPiton fork: [github.com/radheshyam2006/openpiton](https://github.com/radheshyam2006/openpiton)
-- CVA6 bootrom fix: [github.com/radheshyam2006/cva6/tree/bootrom-fix](https://github.com/radheshyam2006/cva6/tree/bootrom-fix)
+- CVA6 bootrom fix: [github.com/radheshyam2006/cva6/tree/bootrom-fix](https://github.com/openhwgroup/cva6/compare/master...radheshyam2006:cva6:bootrom-fix)
 
 ---
 
@@ -394,13 +421,13 @@ All changes implemented following Prof. Balkind's code review feedback — compi
 
 Following the FOSSi Foundation's practice, I will publish regular progress updates:
 
-- **Medium Blog Posts:** At least one post per evaluation period (ideally bi-weekly), covering technical progress, challenges encountered, and lessons learned. Previous FOSSi GSoC contributors have used personal blogs and Medium effectively for this purpose.
+- **Blog Posts:** At least one post per evaluation period (ideally bi-weekly) on Medium or a personal blog, covering technical progress, challenges encountered, and lessons learned.
 - **GitHub:** All code, documentation, and experiment logs will be maintained in public repositories with detailed READMEs. Weekly commits demonstrating continuous progress.
-- **FOSSi Community:** I am open to contributing guest posts to the FOSSi Foundation blog if the mentors recommend it.
+- **FOSSi Community:** I am open to contributing guest posts to the FOSSi Foundation blog if the mentors recommend it. The FOSSi Foundation occasionally features GSoC contributor write-ups on their blog, and I would be glad to share this project's technical insights with the wider open-source hardware community.
 
 ### Communication with Mentors
 
-- **Weekly sync calls** (video/audio) — I am comfortable with regular scheduled meetings with Dr. López Paradís and Prof. Balkind.
+- **Weekly sync calls** (video/audio) — I am comfortable with regular scheduled meetings with Dr. López Paradís and Prof. Jon.
 - **Email** for asynchronous updates, questions, and scheduling.
 - **OpenPiton mailing list** for community-facing discussions and questions (I have already been using this channel).
 - **GitHub Issues & PRs** for all technical work — transparent and reviewable.
@@ -420,7 +447,9 @@ Following the FOSSi Foundation's practice, I will publish regular progress updat
 3rd Year B.Tech, Electronics & Communication Engineering
 IIIT Hyderabad
 
-📧 radheshyam180206@gmail.com · 📱 +91 9392182006 · 🔗 [GitHub](https://github.com/radheshyam2006)
+📧 radheshyam180206@gmail.com · 📱 +91 9392182006
+🔗 [GitHub](https://github.com/radheshyam2006) · [LinkedIn](https://www.linkedin.com/in/radheshyam-modampuri-9508a3286/)
+**Timezone:** IST (UTC+5:30)
 
 ### Background
 
@@ -428,8 +457,8 @@ I work at the **CVEST Lab** (Center for VLSI and Embedded Systems Technologies) 
 
 **Hardware Design & Verification:**
 - Write Verilog RTL regularly — simulating, synthesizing, and debugging hardware modules at the lab.
-- Current project: Building ML inference models in synthesizable RTL for ASIC fabrication (PVT variation compensation in analog circuits).
-- FPGA experience: Xilinx Zynq boards (ML deployment) and AMD VCK5000 (parallelized matrix multiplication across multiple tiles).
+- Current project: Building ML inference models in synthesizable RTL for ASIC fabrication (PVT variation compensation in analog circuits using ML techniques).
+- FPGA experience: Xilinx Zynq boards (ML deployment) and RAG Accelerator on AMD VCK5000 (parallelized matrix multiplication across multiple tiles).
 
 **RISC-V & Systems:**
 - Worked on RISC-V processor designs — understand ISA, privilege modes, CSRs, and trap handling.
