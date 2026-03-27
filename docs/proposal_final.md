@@ -1,6 +1,4 @@
-# ─────────────────────────────────────────────────────────
-# COVER PAGE
-# ─────────────────────────────────────────────────────────
+
 
 <div align="center">
 
@@ -133,6 +131,13 @@ Once MinimumLinuxBoot is functional, any OpenPiton researcher or hardware engine
 | OS-level CI/CD | Automated regression testing after every RTL commit |
 
 **Community impact:** This tool transforms OpenPiton from a platform where Linux testing is a multi-day event into one where it is a routine part of the development cycle. Every researcher using OpenPiton+Ariane — or any future core integrated into OpenPiton — benefits from this infrastructure.
+
+### Relation to Previous GSoC Projects
+
+This project acts as a critical enabler for other high-impact OpenPiton advances. Specifically, it builds upon and complements recent GSoC 2025 work:
+
+- **Distributed Simulation (Metro-MPI++):** Modern RTL simulation is computationally expensive and often limited by single-node processing capabilities. Last year's Metro-MPI++ project improved distributed RTL simulation using Verilator and MPI to handle large-scale OpenPiton designs. While Metro-MPI++ accelerates the simulation backend, *MinimumLinuxBoot* fast-forwards the simulation inherently, making these two efforts highly synergistic in solving the simulation bottleneck.
+- **RISC-V RVA23 Compliance:** Another recent project enhanced the OpenPiton+Ariane architecture toward RISC-V RVA23 profile compliance. The primary focus was implementing the Svnapot extension, modifying the CVA6 MMU, Page Table Walker (PTW), and Translation Lookaside Buffer (TLB), along with extensions like Svpbmt (Page-Based Memory Types) and Svadu (Hardware Updating of A/D Bits). Having a fast Linux boot capability is critical for rapidly validating such deep MMU architecture modifications and ensuring they conform to RISC-V specifications against a real operating system.
 
 ---
 
@@ -310,7 +315,7 @@ gantt
 ### Stretch Goals (if ahead of schedule)
 
 **1. Multi-Hart (Multi-Core) State Save/Restore:**
-Extending from single-hart to multi-hart is significantly harder than scaling state linearly. Each hart has its own GPRs, CSRs (`satp`, `mstatus`, `mhartid`), and per-CPU kernel structures that must be restored independently. The critical challenge is **inter-hart synchronization**: all harts must resume in a coordinated manner — if hart 0 begins executing while hart 1 is still loading registers, the kernel's IPI (inter-processor interrupt) mechanism will fire prematurely, causing deadlocks or panics. This directly extends the project from OpenPiton's single-tile to its manycore architecture, and builds toward the distributed simulation work explored in projects like Metro-MPI++ (GSoC 2025).
+Extending from single-hart to multi-hart is significantly harder than scaling state linearly. Each hart has its own GPRs, CSRs (`satp`, `mstatus`, `mhartid`), and per-CPU kernel structures that must be restored independently. The critical challenge is **inter-hart synchronization**: all harts must resume in a coordinated manner — if hart 0 begins executing while hart 1 is still loading registers, the kernel's IPI (inter-processor interrupt) mechanism will fire prematurely, causing deadlocks or panics. This directly extends the project from OpenPiton's single-tile to its manycore architecture, providing the foundational multi-core state-restore capabilities necessary to fully leverage distributed, multi-node simulations like Metro-MPI++.
 
 **2. Verilator Checkpoint Approach (Approach A):**
 Direct mapping of QEMU state to Verilator's `--savable` checkpoint format for near-instant load (~seconds vs. ~10–30 min).
