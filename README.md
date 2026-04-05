@@ -19,7 +19,7 @@ Boot Linux in QEMU (~3 minutes), capture complete architectural state (registers
 
 ```
 QEMU (fast boot)  ──→  Save State  ──→  Inject into Verilator RTL  ──→  Linux Already Running!
-   ~3 minutes          Python tool       Synthetic Assembly              Test immediately
+   ~3 minutes          Python tool       Hybrid Assembly + $readmemh     Test immediately
 ```
 
 **Impact:** Days → Minutes | 1-2 tests/week → Dozens/day | OS-level CI: Impossible → **Feasible**

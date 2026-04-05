@@ -134,10 +134,7 @@ Once MinimumLinuxBoot is functional, any OpenPiton researcher or hardware engine
 
 ### Relation to Previous GSoC Projects
 
-This project acts as a critical enabler for other high-impact OpenPiton advances. Specifically, it builds upon and complements recent GSoC 2025 work:
-
-- **Distributed Simulation (Metro-MPI++):** Modern RTL simulation is computationally expensive and often limited by single-node processing capabilities. Last year's Metro-MPI++ project improved distributed RTL simulation using Verilator and MPI to handle large-scale OpenPiton designs. While Metro-MPI++ accelerates the simulation backend, *MinimumLinuxBoot* fast-forwards the simulation inherently, making these two efforts highly synergistic in solving the simulation bottleneck.
-- **RISC-V RVA23 Compliance:** Another recent project enhanced the OpenPiton+Ariane architecture toward RISC-V RVA23 profile compliance. The primary focus was implementing the Svnapot extension, modifying the CVA6 MMU, Page Table Walker (PTW), and Translation Lookaside Buffer (TLB), along with extensions like Svpbmt (Page-Based Memory Types) and Svadu (Hardware Updating of A/D Bits). Having a fast Linux boot capability is critical for rapidly validating such deep MMU architecture modifications and ensuring they conform to RISC-V specifications against a real operating system.
+Two recent GSoC projects — Metro-MPI++ (distributed simulation) and RVA23 Compliance (MMU extensions) — both modified OpenPiton infrastructure in ways that now require fast Linux testing to validate. MinimumLinuxBoot directly enables that.
 
 ---
 
@@ -151,7 +148,7 @@ The first step is identifying *which* machine state must be saved and restored f
 graph TD
     subgraph "MUST SAVE — Required for Correctness"
         R["CPU Registers<br/>x0–x31, pc"]
-        C["CSRs<br/>satp, mstatus,<br/>stvec, mtvec,<br/>medeleg, mideleg"]
+        C["CSRs & PMP<br/>satp, mstatus, stvec,<br/>sscratch, mscratch,<br/>pmpcfg, pmpaddr"]
         M["Physical Memory<br/>(entire DRAM image)"]
         T["Timer State<br/>mtime, mtimecmp"]
     end
@@ -191,8 +188,9 @@ flowchart TD
     
     D --> H["4. Generate Synthetic<br/>Init Assembly (.S)"]
     E --> H
-    F --> H
     G --> H
+    
+    F --> |"$readmemh injection"| I
     
     H --> I["5. Load into OpenPiton<br/>Verilator Simulation"]
     I --> J["6. Init program restores<br/>all state → jumps to saved PC"]
@@ -254,7 +252,7 @@ graph LR
 
 The above addresses are taken from OpenPiton's peripheral address map defined in [`piton/verif/env/manycore/devices_ariane.xml`](https://github.com/PrincetonUniversity/openpiton/blob/master/piton/verif/env/manycore/devices_ariane.xml). Note: these are **physical addresses** — they are independent of the virtual memory mode (Sv39/Sv48). QEMU's `virt` machine uses different physical addresses for the same peripherals, hence the need for DTB alignment.
 
-**Solution:** Compile a **custom device tree (`.dtb`)** matching OpenPiton's actual peripheral layout from `devices_ariane.xml` (as confirmed by Prof. Jon). Boot QEMU with `-dtb custom.dtb` so the kernel uses OpenPiton-compatible addresses from the start — no post-transfer patching needed.
+**Solution:** A custom `.dts` source file is written to mirror OpenPiton's peripheral map and compiled with `dtc` to produce the `.dtb` passed to QEMU via `-dtb custom.dtb`. Boot QEMU with `-dtb custom.dtb` so the kernel uses OpenPiton-compatible addresses from the start — no post-transfer patching needed.
 
 **Sv39 alignment:** The kernel must be compiled with `CONFIG_RISCV_SV39=y` to produce 3-level page tables compatible with Ariane's MMU (Ariane does not support Sv48).
 
@@ -264,7 +262,7 @@ DRAM base already matches across QEMU `virt` and OpenPiton — both use `0x80000
 
 ## 4. Timeline & Milestones
 
-**Commitment:** 30–35 hours/week throughout the coding period.
+**Commitment:** 25 hours/week consistently throughout the coding period.
 
 ```mermaid
 gantt
@@ -441,7 +439,7 @@ Following the FOSSi Foundation's practice, I will publish regular progress updat
 
 - **Timezone:** IST (UTC+5:30) — I can adjust my schedule for mentor availability in US/European time zones.
 - **Response time:** Within 12 hours on weekdays, guaranteed.
-- **Weekly commitment:** 30–35 hours consistently throughout the coding period.
+- **Weekly commitment:** 25 hours consistently throughout the coding period.
 - **Proactive communication:** If I am stuck or behind schedule, I will communicate immediately rather than going silent.
 
 ---
@@ -481,7 +479,7 @@ I chose this project because the problem resonated with me — the idea that a s
 ### Availability
 
 - **Community Bonding (May 1–24):** Fully available, no academic conflicts.
-- **Coding Period (May 25 – Aug 24):** 30–35 hours/week consistently.
+- **Coding Period (May 25 – Aug 24):** 25 hours/week consistently.
 - **Mid-semester exams (late June):** I will front-load tasks and communicate scheduling adjustments 2 weeks in advance.
 - **End-semester exams:** No conflicts (April before GSoC, November after).
 
